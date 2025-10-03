@@ -1,0 +1,25 @@
+flowchart TD
+    subgraph Client["Sync Service (Go)"]
+        CFG["Config Loader\ninternal/config"]
+        CRON["Scheduler (cron/v3)"]
+        SVC["Sync Logic\ninternal/sync"]
+        ORAC["Oracle Client"]
+        PGP["Postgres Pool"]
+    end
+
+    ENV[".env\nconfigs/.env.example"] --> CFG
+    CSV["docs/r6_branches.csv"] --> CFG
+    SQL1["sqls/200-meter-minimal.sql"] --> SVC
+    SQL2["sqls/200-meter-details.sql"] --> SVC
+
+    CFG --> CRON
+    CFG --> SVC
+    CRON -- "Yearly spec" --> SVC
+    CRON -- "Monthly spec" --> SVC
+    SVC --> ORAC
+    SVC --> PGP
+
+    ORACLE[("Oracle DB")]
+    POSTGRES[("PostgreSQL DB")]
+    ORAC <--> ORACLE
+    PGP <--> POSTGRES

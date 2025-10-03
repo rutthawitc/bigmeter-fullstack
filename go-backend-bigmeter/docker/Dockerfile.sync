@@ -1,0 +1,27 @@
+# Multi-stage build for BigMeter Sync (Oracle->Postgres)
+
+FROM golang:1.25 AS build
+WORKDIR /app
+
+# Cache modules
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build sync binary with oracle tag using go-ora (pure Go)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=mod -tags oracle -trimpath -ldflags "-s -w" -o /out/sync ./cmd/sync
+
+FROM alpine:3.20
+RUN adduser -D -H -u 10001 app && apk add --no-cache ca-certificates tzdata
+USER app
+WORKDIR /app
+ENV TZ=Asia/Bangkok
+COPY --from=build /out/sync /app/sync
+# SQL templates and CSV used at runtime
+COPY sqls /app/sqls
+COPY docs /app/docs
+
+ENTRYPOINT ["/app/sync"]

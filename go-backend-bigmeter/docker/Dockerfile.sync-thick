@@ -1,0 +1,47 @@
+# Multi-stage build for BigMeter Sync using Oracle Instant Client (thick mode)
+
+FROM golang:1.25-bookworm AS build
+WORKDIR /app
+
+# System deps for build & unzip
+RUN apt-get update && apt-get install -y --no-install-recommends unzip build-essential && rm -rf /var/lib/apt/lists/*
+
+# Go modules
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
+COPY go.mod go.sum .
+# Pull godror at build time to avoid flaky tags in repo go.mod
+RUN go get github.com/godror/godror@latest && go mod download
+
+# App source
+COPY . .
+
+# Oracle Instant Client (provided by user in orc_client/*.zip)
+COPY orc_client/instantclient-basic-linux.x64-*.zip /tmp/ic.zip
+RUN mkdir -p /opt/oracle && unzip -q /tmp/ic.zip -d /opt/oracle \
+    && ln -s $(ls -d /opt/oracle/instantclient_*) /opt/oracle/instantclient
+
+# Build with CGO and thick mode (godror)
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient
+ENV CGO_CFLAGS=-I/opt/oracle/instantclient/sdk/include
+ENV CGO_LDFLAGS="-L/opt/oracle/instantclient -Wl,-rpath,/opt/oracle/instantclient -lclntsh"
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath -ldflags "-s -w" -tags oracle -o /out/sync ./cmd/sync
+
+FROM debian:bookworm-slim
+RUN useradd -m -u 10001 app \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata libaio1 libnsl2 \
+    && rm -rf /var/lib/apt/lists/*
+USER app
+WORKDIR /app
+ENV TZ=Asia/Bangkok
+COPY --from=build /out/sync /app/sync
+COPY --from=build /opt/oracle/instantclient /opt/oracle/instantclient
+COPY sqls /app/sqls
+COPY docs /app/docs
+
+# Thick mode runtime
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient
+ENV GODROR_FORCE_THICK=1
+
+ENTRYPOINT ["/app/sync"]

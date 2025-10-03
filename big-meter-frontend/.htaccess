@@ -1,0 +1,82 @@
+# Apache Configuration for Big Meter Frontend
+# Place this file in your web server document root alongside dist/ contents
+
+# ============= SPA ROUTING =============
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    RewriteRule ^index\.html$ - [L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule . /index.html [L]
+</IfModule>
+
+# ============= SECURITY HEADERS =============
+<IfModule mod_headers.c>
+    # Content Security Policy (OVERRIDES meta tag in index.html)
+    # This is the PRODUCTION CSP - no localhost!
+    Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://intranet.pwa.co.th https://api.yourdomain.pwa.co.th; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+    # Prevent clickjacking
+    Header set X-Frame-Options "DENY"
+
+    # Prevent MIME sniffing
+    Header set X-Content-Type-Options "nosniff"
+
+    # XSS Protection
+    Header set X-XSS-Protection "1; mode=block"
+
+    # Referrer Policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # HSTS (uncomment when using HTTPS)
+    # Header set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # Permissions Policy
+    Header set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+</IfModule>
+
+# ============= CACHING =============
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    # Cache static assets with hash
+    <FilesMatch "\.(css|js)$">
+        ExpiresDefault "access plus 1 year"
+        Header set Cache-Control "public, immutable"
+    </FilesMatch>
+
+    # Cache fonts
+    <FilesMatch "\.(woff|woff2|ttf|eot)$">
+        ExpiresDefault "access plus 1 year"
+        Header set Cache-Control "public, immutable"
+    </FilesMatch>
+
+    # Don't cache index.html
+    <FilesMatch "index\.html$">
+        ExpiresDefault "access minus 1 hour"
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </FilesMatch>
+</IfModule>
+
+# ============= COMPRESSION =============
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml text/javascript application/javascript application/json application/xml+rss application/rss+xml font/truetype font/opentype application/vnd.ms-fontobject image/svg+xml
+</IfModule>
+
+# ============= SECURITY =============
+
+# Disable directory browsing
+Options -Indexes
+
+# Block access to hidden files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block access to sensitive files
+<FilesMatch "(^#.*#|\.(bak|conf|dist|fla|in[ci]|log|orig|psd|sh|sql|sw[op])|~)$">
+    Require all denied
+</FilesMatch>

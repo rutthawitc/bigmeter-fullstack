@@ -1,0 +1,37 @@
+erDiagram
+    BM_CUSTCODE_INIT {
+        BIGSERIAL id PK
+        INT fiscal_year
+        TEXT branch_code
+        TEXT cust_code
+        TEXT use_type
+        TEXT meter_no
+        TEXT meter_state
+        TEXT debt_ym
+        TIMESTAMPTZ created_at
+    }
+
+    BM_METER_DETAILS {
+        BIGSERIAL id PK
+        TEXT year_month
+        TEXT branch_code
+        TEXT org_name
+        TEXT cust_code
+        TEXT use_type
+        TEXT use_name
+        TEXT cust_name
+        TEXT address
+        TEXT route_code
+        TEXT meter_no
+        TEXT meter_size
+        TEXT meter_brand
+        TEXT meter_state
+        NUMERIC average
+        NUMERIC present_meter_count
+        NUMERIC present_water_usg
+        TEXT debt_ym
+        TIMESTAMPTZ created_at
+    }
+
+    BM_CUSTCODE_INIT ||--o{ BM_METER_DETAILS : "by branch_code+cust_code (per YM)"
+

@@ -1,0 +1,23 @@
+mini
+        trn.ORG_OWNER_ID AS BA,
+        org.org_name
+        trn.CUST_CODE,
+        ut.USETYPE,
+        ut.usename,
+        trn.CUST_NAME,
+        trn.CUST_ADDRESS,
+        mr.METER_ROUTE_CODE
+        tmp.METER_NO,
+        ms.SIZENAME,
+        mb.BRANDNAME,
+        mst.STATENAME,
+        trn.DEBT_YM,
+
+
+detail
+    trn.CUST_CODE           AS "เลขที่ผู้ใช้น้ำ",
+    tmp.METER_NO            AS "หมายเลขมาตร",
+    cm.AVERAGE              AS "หน่วยน้ำเฉลี่ย",
+    trn.PRESENT_METER_COUNT AS "เลขมาตรที่อ่านได้",
+    trn.PRESENT_WATER_USG   AS "หน่วยน้ำปัจจุบัน",
+    trn.DEBT_YM             AS "เดือนหนี้"

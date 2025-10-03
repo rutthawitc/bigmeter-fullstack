@@ -1,0 +1,201 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-09-22T00:00:00.000Z",
+  "__export_source": "codex-cli:insomnia",
+  "resources": [
+    {
+      "_id": "wrk_bigmeter_api",
+      "_type": "workspace",
+      "name": "BigMeter API",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_bigmeter_base",
+      "_type": "environment",
+      "parentId": "wrk_bigmeter_api",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:8089/api/v1",
+        "branch": "BA01",
+        "ym": "202410",
+        "cust_code": "C12345",
+        "fiscal_year": 2025,
+        "search": ""
+      }
+    },
+    {
+      "_id": "fld_public",
+      "_type": "request_group",
+      "parentId": "wrk_bigmeter_api",
+      "name": "Public",
+      "environment": {},
+      "metaSortKey": -1000000000
+    },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Health",
+      "method": "GET",
+      "url": "{{ _.base_url }}/healthz",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "metaSortKey": -1000000000
+    },
+    {
+      "_id": "req_version",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Version",
+      "method": "GET",
+      "url": "{{ _.base_url }}/version",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "metaSortKey": -900000000
+    },
+    {
+      "_id": "req_branches",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Branches",
+      "method": "GET",
+      "url": "{{ _.base_url }}/branches",
+      "headers": [],
+      "parameters": [
+        { "name": "q", "value": "{{ _.search }}", "disabled": true }
+      ],
+      "body": {},
+      "metaSortKey": -800000000
+    },
+    {
+      "_id": "req_custcodes",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Custcodes (Top-200)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/custcodes",
+      "headers": [],
+      "parameters": [
+        { "name": "branch", "value": "{{ _.branch }}" },
+        { "name": "ym", "value": "{{ _.ym }}" },
+        { "name": "q", "value": "{{ _.search }}", "disabled": true },
+        { "name": "limit", "value": "50" },
+        { "name": "offset", "value": "0" },
+        { "name": "order_by", "value": "created_at" },
+        { "name": "sort", "value": "DESC" }
+      ],
+      "body": {},
+      "metaSortKey": -700000000
+    },
+    {
+      "_id": "req_details",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Details (Monthly)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/details",
+      "headers": [],
+      "parameters": [
+        { "name": "branch", "value": "{{ _.branch }}" },
+        { "name": "ym", "value": "{{ _.ym }}" },
+        { "name": "cust_code", "value": "{{ _.cust_code }}", "disabled": true },
+        { "name": "q", "value": "{{ _.search }}", "disabled": true },
+        { "name": "limit", "value": "50" },
+        { "name": "offset", "value": "0" },
+        { "name": "order_by", "value": "present_water_usg" },
+        { "name": "sort", "value": "DESC" }
+      ],
+      "body": {},
+      "metaSortKey": -600000000
+    },
+    {
+      "_id": "req_details_summary",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Details Summary",
+      "method": "GET",
+      "url": "{{ _.base_url }}/details/summary",
+      "headers": [],
+      "parameters": [
+        { "name": "branch", "value": "{{ _.branch }}" },
+        { "name": "ym", "value": "{{ _.ym }}" }
+      ],
+      "body": {},
+      "metaSortKey": -500000000
+    },
+    {
+      "_id": "req_custcode_series",
+      "_type": "request",
+      "parentId": "fld_public",
+      "name": "Series by Custcode",
+      "method": "GET",
+      "url": "{{ _.base_url }}/custcodes/{{ _.cust_code }}/details",
+      "headers": [],
+      "parameters": [
+        { "name": "branch", "value": "{{ _.branch }}" },
+        { "name": "from", "value": "{{ _.ym }}" },
+        { "name": "to", "value": "{{ _.ym }}" }
+      ],
+      "body": {},
+      "metaSortKey": -400000000
+    },
+    {
+      "_id": "fld_admin",
+      "_type": "request_group",
+      "parentId": "wrk_bigmeter_api",
+      "name": "Admin (Stub)",
+      "environment": {},
+      "metaSortKey": -300000000
+    },
+    {
+      "_id": "req_sync_init",
+      "_type": "request",
+      "parentId": "fld_admin",
+      "name": "Sync Init (stub)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sync/init",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"branches\": [\"{{ _.branch }}\"],\n  \"debt_ym\": \"{{ _.ym }}\"\n}"
+      },
+      "metaSortKey": -300000000
+    },
+    {
+      "_id": "req_sync_monthly",
+      "_type": "request",
+      "parentId": "fld_admin",
+      "name": "Sync Monthly (stub)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/sync/monthly",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "parameters": [],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"branches\": [\"{{ _.branch }}\"],\n  \"ym\": \"{{ _.ym }}\"\n}"
+      },
+      "metaSortKey": -200000000
+    },
+    {
+      "_id": "req_config",
+      "_type": "request",
+      "parentId": "fld_admin",
+      "name": "Config (stub)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/config",
+      "headers": [],
+      "parameters": [],
+      "body": {},
+      "metaSortKey": -100000000
+    }
+  ]
+}
+

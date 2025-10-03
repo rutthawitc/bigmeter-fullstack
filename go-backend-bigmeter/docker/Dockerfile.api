@@ -1,0 +1,22 @@
+# Multi-stage build for BigMeter API (Gin)
+
+FROM golang:1.25 AS build
+WORKDIR /app
+
+# Copy source (avoid downloading unused deps like Oracle driver)
+COPY . .
+
+# Build API binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=mod -trimpath -ldflags "-s -w" -o /out/api ./cmd/api
+
+FROM alpine:3.20
+RUN adduser -D -H -u 10001 app && apk add --no-cache ca-certificates tzdata
+USER app
+WORKDIR /app
+ENV TZ=Asia/Bangkok
+COPY --from=build /out/api /app/api
+
+# Expose Gin default port
+EXPOSE 8089
+
+ENTRYPOINT ["/app/api"]

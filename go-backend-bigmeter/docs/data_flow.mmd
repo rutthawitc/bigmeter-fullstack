@@ -1,0 +1,22 @@
+flowchart LR
+    subgraph Yearly_Init["Yearly Init (Oct 15, 22:00)"]
+        A1[Start] --> A2[Load branches]
+        A2 --> A3[Run 200-meter-minimal.sql per branch (Oracle)]
+        A3 --> A4[Upsert -> bm_custcode_init (Postgres)]
+        A4 --> A5[End]
+    end
+
+    subgraph Monthly_Details["Monthly (16th, 08:00)"]
+        B1[Start] --> B2[Select cust_code from bm_custcode_init by branch+fiscal]
+        B2 --> B3[Chunk cust_code (size 100)]
+        B3 --> B4[Query Oracle details with IN(:C0..)]
+        B4 --> B5{Rows returned?}
+        B5 -- Yes --> B6[Upsert actual rows into bm_meter_details]
+        B5 -- No  --> B7[Read snapshot (use_type, meter_no, meter_state)]
+        B7 --> B8[Upsert zeroed row with snapshot text]
+        B6 --> B9[Next chunk]
+        B8 --> B9[Next chunk]
+        B9 --> B10[Commit + Log per-batch and total zeroed]
+        B10 --> B11[End]
+    end
+

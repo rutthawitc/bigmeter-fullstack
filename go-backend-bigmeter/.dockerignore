@@ -1,0 +1,23 @@
+# Docker build context ignores
+.git
+.gitignore
+**/.DS_Store
+**/*.swp
+**/*.swo
+node_modules
+tmp
+dist
+bin
+build
+coverage
+.vscode
+.idea
+
+# Local env files (use .env.example only)
+.env
+configs/.env
+
+# Go build cache
+**/*.test
+*.out
+

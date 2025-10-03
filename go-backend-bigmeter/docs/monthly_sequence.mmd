@@ -1,0 +1,25 @@
+%% YM passed into monthly is Gregorian (YYYYMM). Service converts to Thai DEBT_YM for Oracle binds.
+sequenceDiagram
+    participant Cron as Cron (Scheduler)
+    participant Service as Sync Service
+    participant PG as PostgreSQL
+    participant ORA as Oracle
+
+    Cron->>Service: Trigger monthly(ym Gregorian, branch)
+    Service->>PG: SELECT cust_code FROM bm_custcode_init WHERE branch,fiscal
+    PG-->>Service: cust_code list
+    loop each batch (<= 100)
+        Service->>ORA: 200-meter-details.sql with IN(:C0..), ORG_OWNER_ID, DEBT_YM (Thai)
+        alt rows found
+            ORA-->>Service: detail rows
+            loop each row
+                Service->>PG: UPSERT bm_meter_details (actual values)
+            end
+        else no rows for some cust_code
+            Service->>PG: SELECT snapshot fields (use_type, meter_no, meter_state)
+            Service->>PG: UPSERT bm_meter_details (zeros + snapshot text)
+        end
+        Service->>Service: log per-batch zeroed count
+    end
+    Service->>PG: COMMIT
+    Service->>Service: log total zeroed
