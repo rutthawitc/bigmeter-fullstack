@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:17.5-alpine3.20
@@ -9,13 +11,13 @@ services:
       TZ: Asia/Bangkok
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Port not exposed - internal Docker network only
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   migrate:
     image: postgres:17.5-alpine3.20
@@ -51,7 +53,7 @@ services:
       PGDATABASE: ${POSTGRES_DB:-bigmeter}
       TZ: Asia/Bangkok
     volumes:
-      - ./docs:/seed:ro
+      - ./seed-data:/seed:ro
     command:
       - sh
       - -c
@@ -69,18 +71,14 @@ services:
     restart: "no"
 
   api:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.api
+    image: ${DOCKER_REGISTRY:-your-registry}/bigmeter-api:${IMAGE_TAG:-latest}
     container_name: bigmeter_api
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      # Compose a DSN using the local Postgres service
       POSTGRES_DSN: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bigmeter}?sslmode=disable
       TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
-      # Optional: override via .env or configs/.env inside container if you bind-mount
       BRANCHES: ${BRANCHES:-}
       PORT: ${PORT:-8089}
     ports:
@@ -88,9 +86,7 @@ services:
     restart: unless-stopped
 
   sync:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.sync-thick
+    image: ${DOCKER_REGISTRY:-your-registry}/bigmeter-sync:${IMAGE_TAG:-latest}
     container_name: bigmeter_sync
     depends_on:
       postgres:
@@ -101,17 +97,19 @@ services:
       TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
       BRANCHES: ${BRANCHES:-}
       MODE: ${MODE:-}
+      SYNC_CONCURRENCY: ${SYNC_CONCURRENCY:-2}
+      SYNC_RETRIES: ${SYNC_RETRIES:-2}
+      SYNC_RETRY_DELAY: ${SYNC_RETRY_DELAY:-10s}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
       ENABLE_YEARLY_INIT: ${ENABLE_YEARLY_INIT:-true}
       ENABLE_MONTHLY_SYNC: ${ENABLE_MONTHLY_SYNC:-true}
+      METRICS_ADDR: ${METRICS_ADDR:-}
+    ports:
+      - "${METRICS_PORT:-9090}:9090"
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ../big-meter-frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ""
-        VITE_LOGIN_API: "https://intranet.pwa.co.th/login/webservice_login6.php"
+    image: ${DOCKER_REGISTRY:-your-registry}/bigmeter-frontend:${IMAGE_TAG:-latest}
     container_name: bigmeter_frontend
     depends_on:
       - api

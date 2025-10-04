@@ -17,8 +17,10 @@ type Config struct {
 	PostgresDSN string
 	Branches    []string
 	// Schedules use cron spec; timezone applied from Timezone.
-	YearlySpec  string
-	MonthlySpec string
+	YearlySpec        string
+	MonthlySpec       string
+	EnableYearlyInit  bool
+	EnableMonthlySync bool
 }
 
 // Load loads configuration from environment variables. It will read a local
@@ -33,11 +35,13 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		Timezone:    tz,
-		OracleDSN:   os.Getenv("ORACLE_DSN"),
-		PostgresDSN: os.Getenv("POSTGRES_DSN"),
-		YearlySpec:  getEnv("CRON_YEARLY", "0 0 22 15 10 *"), // 22:00 Oct 15 every year
-		MonthlySpec: getEnv("CRON_MONTHLY", "0 0 8 16 * *"),  // 08:00 on the 16th monthly
+		Timezone:          tz,
+		OracleDSN:         os.Getenv("ORACLE_DSN"),
+		PostgresDSN:       os.Getenv("POSTGRES_DSN"),
+		YearlySpec:        getEnv("CRON_YEARLY", "0 0 22 15 10 *"), // 22:00 Oct 15 every year
+		MonthlySpec:       getEnv("CRON_MONTHLY", "0 0 8 16 * *"),  // 08:00 on the 16th monthly
+		EnableYearlyInit:  getBoolEnv("ENABLE_YEARLY_INIT", true),
+		EnableMonthlySync: getBoolEnv("ENABLE_MONTHLY_SYNC", true),
 	}
 
 	// Branch list as comma-separated codes, e.g. BA01,BA02,...
@@ -55,6 +59,14 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func getBoolEnv(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	return v == "true" || v == "1" || v == "yes"
 }
 
 func splitAndTrim(s, sep string) []string {

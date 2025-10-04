@@ -129,8 +129,9 @@ func main() {
 		// Use seconds-field cron (6 fields) to match defaults like "0 0 22 15 10 *"
 		cr := cron.New(cron.WithLocation(loc), cron.WithSeconds())
 
-		// Yearly cohort init
-		_, err = cr.AddFunc(cfg.YearlySpec, func() {
+		// Yearly cohort init (optional)
+		if cfg.EnableYearlyInit {
+			_, err = cr.AddFunc(cfg.YearlySpec, func() {
 			now := time.Now().In(loc)
 			fiscal := fiscalYear(now)
 			// Use Gregorian October of current year for YM; convert to Thai for Oracle
@@ -153,9 +154,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("cron yearly add: %v", err)
 		}
+		} else {
+			log.Printf("yearly init disabled (ENABLE_YEARLY_INIT=false)")
+		}
 
-		// Monthly details
-		_, err = cr.AddFunc(cfg.MonthlySpec, func() {
+		// Monthly details (optional)
+		if cfg.EnableMonthlySync {
+			_, err = cr.AddFunc(cfg.MonthlySpec, func() {
 			now := time.Now().In(loc)
 			ym := fmt.Sprintf("%04d%02d", now.Year(), int(now.Month()))
 			log.Printf("cron monthly: start ym=%s branches=%d", ym, len(cfg.Branches))
@@ -176,8 +181,20 @@ func main() {
 		if err != nil {
 			log.Fatalf("cron monthly add: %v", err)
 		}
+		} else {
+			log.Printf("monthly sync disabled (ENABLE_MONTHLY_SYNC=false)")
+		}
 
-		log.Printf("scheduler running (TZ=%s) yearly='%s' monthly='%s'", cfg.Timezone, cfg.YearlySpec, cfg.MonthlySpec)
+		// Log scheduler status
+		yearlyStatus := "disabled"
+		if cfg.EnableYearlyInit {
+			yearlyStatus = cfg.YearlySpec
+		}
+		monthlyStatus := "disabled"
+		if cfg.EnableMonthlySync {
+			monthlyStatus = cfg.MonthlySpec
+		}
+		log.Printf("scheduler running (TZ=%s) yearly='%s' monthly='%s'", cfg.Timezone, yearlyStatus, monthlyStatus)
 		cr.Run()
 	}
 }
