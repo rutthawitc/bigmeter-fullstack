@@ -1,0 +1,98 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Binaries for programs and plugins
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.cov
+coverage.out
+coverage.html
+
+# Go workspace file
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude Code settings (local)
+.claude/settings.local.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker volumes and data
+pgdata/
+*.log
+
+# Node.js (frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Frontend build output
+big-meter-frontend/dist/
+big-meter-frontend/build/
+big-meter-frontend/.next/
+big-meter-frontend/out/
+
+# Frontend misc
+big-meter-frontend/.cache/
+big-meter-frontend/.parcel-cache/
+big-meter-frontend/.eslintcache
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+.temp/
+tmp/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Secrets and credentials
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# Backup files
+*.sql.gz
+*.sql
+backups/
+
+# Production configs with secrets (keep .example files)
+go-backend-bigmeter/.env
+!go-backend-bigmeter/.env.example
