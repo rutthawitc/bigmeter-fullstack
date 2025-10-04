@@ -14,6 +14,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"go-backend-bigmeter/internal/config"
 	dbpkg "go-backend-bigmeter/internal/database"
+	"go-backend-bigmeter/internal/notify"
 	syncsvc "go-backend-bigmeter/internal/sync"
 )
 
@@ -38,6 +39,25 @@ func main() {
 	defer ora.Close()
 
 	svc := syncsvc.NewService(ora, pg)
+
+	// Initialize Telegram notifier
+	notifier, err := notify.NewTelegramNotifier(notify.TelegramConfig{
+		BotToken:          cfg.Telegram.BotToken,
+		ChatID:            cfg.Telegram.ChatID,
+		Enabled:           cfg.Telegram.Enabled,
+		YearlyPrefix:      cfg.Telegram.YearlyPrefix,
+		MonthlyPrefix:     cfg.Telegram.MonthlyPrefix,
+		YearlySuccessMsg:  cfg.Telegram.YearlySuccessMsg,
+		YearlyFailureMsg:  cfg.Telegram.YearlyFailureMsg,
+		MonthlySuccessMsg: cfg.Telegram.MonthlySuccessMsg,
+		MonthlyFailureMsg: cfg.Telegram.MonthlyFailureMsg,
+	})
+	if err != nil {
+		log.Fatalf("telegram notifier: %v", err)
+	}
+	if cfg.Telegram.Enabled {
+		log.Printf("telegram notifications enabled (chat_id=%d)", cfg.Telegram.ChatID)
+	}
 
 	// Optional Prometheus metrics server
 	if addr := strings.TrimSpace(os.Getenv("METRICS_ADDR")); addr != "" {
@@ -138,18 +158,35 @@ func main() {
 			ymGreg := fmt.Sprintf("%04d10", now.Year())
 			thaiYM, _ := toThaiYM(ymGreg)
 			log.Printf("cron yearly: start fiscal=%d debt_ym=%s branches=%d", fiscal, thaiYM, len(cfg.Branches))
+
+			startTime := time.Now()
+			var failedBranches []string
+			var lastError error
+
 			// Concurrency + retry controls
 			conc := getEnvInt("SYNC_CONCURRENCY", 2)
 			retries := getEnvInt("SYNC_RETRIES", 2)
 			delay := getEnvDur("SYNC_RETRY_DELAY", 10*time.Second)
 			runBranchesConcurrent(cfg.Branches, conc, func(branch string) {
-				_ = runWithRetry(retries, delay, func() error {
+				err := runWithRetry(retries, delay, func() error {
 					return svc.InitCustcodes(context.Background(), fiscal, strings.TrimSpace(branch), thaiYM)
 				}, func(attempt int, err error) {
 					log.Printf("cron yearly init %s attempt=%d: %v", branch, attempt, err)
 				})
+				if err != nil {
+					failedBranches = append(failedBranches, branch)
+					lastError = err
+				}
 			})
-			log.Printf("cron yearly: completed")
+
+			duration := time.Since(startTime)
+			if len(failedBranches) > 0 {
+				log.Printf("cron yearly: completed with errors (failed: %d/%d)", len(failedBranches), len(cfg.Branches))
+				notifier.NotifyYearlyFailure(fiscal, cfg.Branches, failedBranches, lastError)
+			} else {
+				log.Printf("cron yearly: completed successfully")
+				notifier.NotifyYearlySuccess(fiscal, cfg.Branches, duration)
+			}
 		})
 		if err != nil {
 			log.Fatalf("cron yearly add: %v", err)
@@ -164,19 +201,36 @@ func main() {
 			now := time.Now().In(loc)
 			ym := fmt.Sprintf("%04d%02d", now.Year(), int(now.Month()))
 			log.Printf("cron monthly: start ym=%s branches=%d", ym, len(cfg.Branches))
+
+			startTime := time.Now()
+			var failedBranches []string
+			var lastError error
+
 			// Controls
 			conc := getEnvInt("SYNC_CONCURRENCY", 2)
 			retries := getEnvInt("SYNC_RETRIES", 2)
 			delay := getEnvDur("SYNC_RETRY_DELAY", 10*time.Second)
 			bs := getEnvInt("BATCH_SIZE", 100)
 			runBranchesConcurrent(cfg.Branches, conc, func(branch string) {
-				_ = runWithRetry(retries, delay, func() error {
+				err := runWithRetry(retries, delay, func() error {
 					return svc.MonthlyDetails(context.Background(), ym, strings.TrimSpace(branch), bs)
 				}, func(attempt int, err error) {
 					log.Printf("cron monthly %s attempt=%d: %v", branch, attempt, err)
 				})
+				if err != nil {
+					failedBranches = append(failedBranches, branch)
+					lastError = err
+				}
 			})
-			log.Printf("cron monthly: completed ym=%s", ym)
+
+			duration := time.Since(startTime)
+			if len(failedBranches) > 0 {
+				log.Printf("cron monthly: completed with errors (failed: %d/%d)", len(failedBranches), len(cfg.Branches))
+				notifier.NotifyMonthlyFailure(ym, cfg.Branches, failedBranches, lastError)
+			} else {
+				log.Printf("cron monthly: completed successfully ym=%s", ym)
+				notifier.NotifyMonthlySuccess(ym, cfg.Branches, duration)
+			}
 		})
 		if err != nil {
 			log.Fatalf("cron monthly add: %v", err)

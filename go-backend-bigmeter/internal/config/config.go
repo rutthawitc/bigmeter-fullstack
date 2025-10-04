@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -21,6 +22,21 @@ type Config struct {
 	MonthlySpec       string
 	EnableYearlyInit  bool
 	EnableMonthlySync bool
+	// Telegram notification settings
+	Telegram TelegramConfig
+}
+
+// TelegramConfig holds Telegram notification settings
+type TelegramConfig struct {
+	Enabled           bool
+	BotToken          string
+	ChatID            int64
+	YearlyPrefix      string
+	MonthlyPrefix     string
+	YearlySuccessMsg  string
+	YearlyFailureMsg  string
+	MonthlySuccessMsg string
+	MonthlyFailureMsg string
 }
 
 // Load loads configuration from environment variables. It will read a local
@@ -42,6 +58,7 @@ func Load() (Config, error) {
 		MonthlySpec:       getEnv("CRON_MONTHLY", "0 0 8 16 * *"),  // 08:00 on the 16th monthly
 		EnableYearlyInit:  getBoolEnv("ENABLE_YEARLY_INIT", true),
 		EnableMonthlySync: getBoolEnv("ENABLE_MONTHLY_SYNC", true),
+		Telegram:          loadTelegramConfig(),
 	}
 
 	// Branch list as comma-separated codes, e.g. BA01,BA02,...
@@ -67,6 +84,54 @@ func getBoolEnv(key string, def bool) bool {
 		return def
 	}
 	return v == "true" || v == "1" || v == "yes"
+}
+
+func getInt64Env(key string, def int64) int64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+func loadTelegramConfig() TelegramConfig {
+	return TelegramConfig{
+		Enabled:  getBoolEnv("TELEGRAM_ENABLED", false),
+		BotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		ChatID:   getInt64Env("TELEGRAM_CHAT_ID", 0),
+		YearlyPrefix: getEnv("TELEGRAM_YEARLY_PREFIX",
+			"🔄 <b>Big Meter - Yearly Sync</b>"),
+		MonthlyPrefix: getEnv("TELEGRAM_MONTHLY_PREFIX",
+			"📊 <b>Big Meter - Monthly Sync</b>"),
+		YearlySuccessMsg: getEnv("TELEGRAM_YEARLY_SUCCESS",
+			"✅ Yearly cohort init completed successfully\n"+
+				"Fiscal Year: {fiscal_year}\n"+
+				"Branches: {count} ({branches})\n"+
+				"Duration: {duration}\n"+
+				"Time: {timestamp}"),
+		YearlyFailureMsg: getEnv("TELEGRAM_YEARLY_FAILURE",
+			"❌ Yearly cohort init failed\n"+
+				"Fiscal Year: {fiscal_year}\n"+
+				"Failed Branches: {failed_branches}\n"+
+				"Error: {error}\n"+
+				"Time: {timestamp}"),
+		MonthlySuccessMsg: getEnv("TELEGRAM_MONTHLY_SUCCESS",
+			"✅ Monthly sync completed successfully\n"+
+				"Year-Month: {year_month}\n"+
+				"Branches: {count} ({branches})\n"+
+				"Duration: {duration}\n"+
+				"Time: {timestamp}"),
+		MonthlyFailureMsg: getEnv("TELEGRAM_MONTHLY_FAILURE",
+			"❌ Monthly sync failed\n"+
+				"Year-Month: {year_month}\n"+
+				"Failed Branches: {failed_branches}\n"+
+				"Error: {error}\n"+
+				"Time: {timestamp}"),
+	}
 }
 
 func splitAndTrim(s, sep string) []string {

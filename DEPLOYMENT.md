@@ -172,6 +172,11 @@ BATCH_SIZE=100
 ENABLE_YEARLY_INIT=true
 ENABLE_MONTHLY_SYNC=true
 
+# Telegram Notifications (Optional)
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_CHAT_ID=-1001234567890
+
 # Metrics (Optional)
 METRICS_ADDR=:9090
 METRICS_PORT=9090
@@ -526,6 +531,120 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 | `METRICS_PORT` | No | `9090` | Prometheus metrics port |
 | `ENABLE_YEARLY_INIT` | No | `true` | Enable yearly cohort init cron job |
 | `ENABLE_MONTHLY_SYNC` | No | `true` | Enable monthly sync cron job |
+| `TELEGRAM_ENABLED` | No | `false` | Enable Telegram notifications |
+| `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot API token |
+| `TELEGRAM_CHAT_ID` | No | `0` | Telegram chat/group ID (negative for groups) |
+| `TELEGRAM_YEARLY_PREFIX` | No | Default | Prefix for yearly sync messages |
+| `TELEGRAM_MONTHLY_PREFIX` | No | Default | Prefix for monthly sync messages |
+| `TELEGRAM_YEARLY_SUCCESS` | No | Default | Success message template for yearly |
+| `TELEGRAM_YEARLY_FAILURE` | No | Default | Failure message template for yearly |
+| `TELEGRAM_MONTHLY_SUCCESS` | No | Default | Success message template for monthly |
+| `TELEGRAM_MONTHLY_FAILURE` | No | Default | Failure message template for monthly |
+
+---
+
+## Telegram Notifications Setup
+
+### Step 1: Create Telegram Bot
+
+1. Open Telegram and search for **@BotFather**
+2. Send `/newbot` command
+3. Follow the prompts to create your bot
+4. Copy the **bot token** (e.g., `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`)
+
+### Step 2: Get Chat ID
+
+**For Private Chat:**
+1. Start a chat with your bot
+2. Send any message to the bot
+3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Look for `"chat":{"id":123456789}` in the JSON response
+
+**For Group Chat:**
+1. Create a group and add your bot
+2. Send a message in the group
+3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Look for `"chat":{"id":-1001234567890}` (negative number for groups)
+
+### Step 3: Configure Environment
+
+```bash
+# Enable Telegram notifications
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_CHAT_ID=-1001234567890
+```
+
+### Step 4: Customize Messages (Optional)
+
+You can customize notification messages using placeholders:
+
+**Available Placeholders:**
+- Yearly: `{fiscal_year}`, `{branches}`, `{count}`, `{duration}`, `{timestamp}`, `{failed_branches}`, `{error}`
+- Monthly: `{year_month}`, `{branches}`, `{count}`, `{duration}`, `{timestamp}`, `{failed_branches}`, `{error}`
+
+**Example Custom Messages:**
+
+```bash
+# Thai language notifications
+TELEGRAM_YEARLY_PREFIX="🔄 <b>Big Meter - การซิงค์รายปี</b>"
+TELEGRAM_YEARLY_SUCCESS="✅ การซิงค์รายปีเสร็จสมบูรณ์\nปีงบประมาณ: {fiscal_year}\nสาขา: {count} แห่ง\nระยะเวลา: {duration}"
+TELEGRAM_YEARLY_FAILURE="❌ การซิงค์รายปีล้มเหลว\nปีงบประมาณ: {fiscal_year}\nสาขาที่ล้มเหลว: {failed_branches}\nข้อผิดพลาด: {error}"
+
+TELEGRAM_MONTHLY_PREFIX="📊 <b>Big Meter - การซิงค์รายเดือน</b>"
+TELEGRAM_MONTHLY_SUCCESS="✅ การซิงค์รายเดือนเสร็จสมบูรณ์\nเดือน: {year_month}\nสาขา: {count} แห่ง\nระยะเวลา: {duration}"
+TELEGRAM_MONTHLY_FAILURE="❌ การซิงค์รายเดือนล้มเหลว\nเดือน: {year_month}\nสาขาที่ล้มเหลว: {failed_branches}\nข้อผิดพลาด: {error}"
+```
+
+### Step 5: Test Notifications
+
+```bash
+# Run a one-off sync to test notifications
+docker-compose -f docker-compose.prod.yml run --rm \
+  -e MODE=month-once \
+  -e YM=202501 \
+  sync
+```
+
+### Notification Examples
+
+**Success Notification:**
+```
+🔄 Big Meter - Yearly Sync
+
+✅ Yearly cohort init completed successfully
+Fiscal Year: 2025
+Branches: 3 (BA01, BA02, BA03)
+Duration: 45.2s
+Time: 2025-10-15 22:00:15
+```
+
+**Failure Notification:**
+```
+🔄 Big Meter - Yearly Sync
+
+❌ Yearly cohort init failed
+Fiscal Year: 2025
+Failed Branches: BA02, BA03
+Error: connection timeout
+Time: 2025-10-15 22:05:30
+```
+
+### Troubleshooting Telegram
+
+```bash
+# Check if Telegram is enabled
+docker-compose -f docker-compose.prod.yml exec sync env | grep TELEGRAM
+
+# View notification logs
+docker-compose -f docker-compose.prod.yml logs sync | grep telegram
+
+# Common issues:
+# - Bot token invalid: Check BotFather for correct token
+# - Chat ID wrong: Use negative number for groups
+# - Bot not in group: Add bot to group and make it admin
+# - Network issues: Check firewall allows https://api.telegram.org
+```
 
 ---
 
