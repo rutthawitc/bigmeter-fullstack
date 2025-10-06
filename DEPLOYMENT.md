@@ -38,7 +38,7 @@ This guide explains how to deploy Big Meter to a production server using pre-bui
 
 ```bash
 # Export your Docker registry URL
-export DOCKER_REGISTRY="your-registry.com/bigmeter"  # or docker.io/username
+export DOCKER_REGISTRY="your-registry.com"  # or docker.io/username
 
 # Optional: Set image tag (default: latest)
 export IMAGE_TAG="v1.0.0"  # or use git commit hash
@@ -179,10 +179,6 @@ ENABLE_MONTHLY_SYNC=true
 TELEGRAM_ENABLED=true
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 TELEGRAM_CHAT_ID=-1001234567890
-
-# Metrics (Optional)
-METRICS_ADDR=:9090
-METRICS_PORT=9090
 EOF
 
 # Secure the .env file
@@ -461,9 +457,6 @@ docker stats
 # Check API response time
 time curl http://localhost:8089/api/v1/healthz
 
-# View sync service metrics (if enabled)
-curl http://localhost:9090/metrics
-
 # Check database connections
 docker-compose -f docker-compose.prod.yml exec postgres \
   psql -U postgres -d bigmeter -c "SELECT count(*) FROM pg_stat_activity;"
@@ -534,8 +527,6 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 | `SYNC_RETRIES`             | No         | `2`            | Number of retry attempts                         |
 | `SYNC_RETRY_DELAY`         | No         | `10s`          | Delay between retries                            |
 | `BATCH_SIZE`               | No         | `100`          | Batch size for Oracle queries                    |
-| `METRICS_ADDR`             | No         | -              | Prometheus metrics address                       |
-| `METRICS_PORT`             | No         | `9090`         | Prometheus metrics port                          |
 | `ENABLE_YEARLY_INIT`       | No         | `true`         | Enable yearly cohort init cron job               |
 | `ENABLE_MONTHLY_SYNC`      | No         | `true`         | Enable monthly sync cron job                     |
 | `TELEGRAM_ENABLED`         | No         | `false`        | Enable Telegram notifications                    |
