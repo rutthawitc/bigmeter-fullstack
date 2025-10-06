@@ -75,6 +75,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      ORACLE_DSN: ${ORACLE_DSN:-}
       POSTGRES_DSN: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bigmeter}?sslmode=disable
       TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
       BRANCHES: ${BRANCHES:-}
