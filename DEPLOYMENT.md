@@ -68,9 +68,9 @@ az acr login --name myregistry
 ```bash
 cd go-backend-bigmeter
 
-# Build API service
+# Build API service (with Oracle support)
 docker build \
-  -f docker/Dockerfile.api \
+  -f docker/Dockerfile.api-thick \
   -t ${DOCKER_REGISTRY}/bigmeter-api:${IMAGE_TAG:-latest} \
   .
 
