@@ -71,7 +71,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/Dockerfile.api-thick
     container_name: bigmeter_api
     depends_on:
       postgres:
@@ -79,6 +79,7 @@ services:
     environment:
       # Compose a DSN using the local Postgres service
       POSTGRES_DSN: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-bigmeter}?sslmode=disable
+      ORACLE_DSN: ${ORACLE_DSN:-}
       TIMEZONE: ${TIMEZONE:-Asia/Bangkok}
       # Optional: override via .env or configs/.env inside container if you bind-mount
       BRANCHES: ${BRANCHES:-}

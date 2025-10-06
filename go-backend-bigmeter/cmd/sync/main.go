@@ -118,7 +118,7 @@ func main() {
 			log.Fatalf("init-once Thai YM: %v", err)
 		}
 		for _, b := range cfg.Branches {
-			if err := svc.InitCustcodes(ctx, fiscal, strings.TrimSpace(b), thaiYM); err != nil {
+			if _, _, err := svc.InitCustcodes(ctx, fiscal, strings.TrimSpace(b), thaiYM, "manual"); err != nil {
 				log.Printf("init %s: %v", b, err)
 			}
 		}
@@ -135,7 +135,7 @@ func main() {
 			}
 		}
 		for _, b := range cfg.Branches {
-			if err := svc.MonthlyDetails(ctx, ym, strings.TrimSpace(b), bs); err != nil {
+			if _, _, err := svc.MonthlyDetails(ctx, ym, strings.TrimSpace(b), bs, "manual"); err != nil {
 				log.Printf("month %s: %v", b, err)
 			}
 		}
@@ -169,7 +169,8 @@ func main() {
 			delay := getEnvDur("SYNC_RETRY_DELAY", 10*time.Second)
 			runBranchesConcurrent(cfg.Branches, conc, func(branch string) {
 				err := runWithRetry(retries, delay, func() error {
-					return svc.InitCustcodes(context.Background(), fiscal, strings.TrimSpace(branch), thaiYM)
+					_, _, err := svc.InitCustcodes(context.Background(), fiscal, strings.TrimSpace(branch), thaiYM, "scheduler")
+					return err
 				}, func(attempt int, err error) {
 					log.Printf("cron yearly init %s attempt=%d: %v", branch, attempt, err)
 				})
@@ -213,7 +214,8 @@ func main() {
 			bs := getEnvInt("BATCH_SIZE", 100)
 			runBranchesConcurrent(cfg.Branches, conc, func(branch string) {
 				err := runWithRetry(retries, delay, func() error {
-					return svc.MonthlyDetails(context.Background(), ym, strings.TrimSpace(branch), bs)
+					_, _, err := svc.MonthlyDetails(context.Background(), ym, strings.TrimSpace(branch), bs, "scheduler")
+					return err
 				}, func(attempt int, err error) {
 					log.Printf("cron monthly %s attempt=%d: %v", branch, attempt, err)
 				})

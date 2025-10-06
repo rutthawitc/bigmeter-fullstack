@@ -7,20 +7,33 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go-backend-bigmeter/internal/config"
 	dbpkg "go-backend-bigmeter/internal/database"
+	syncsvc "go-backend-bigmeter/internal/sync"
 )
 
 type Server struct {
-	cfg config.Config
-	pg  *dbpkg.Postgres
+	cfg     config.Config
+	pg      *dbpkg.Postgres
+	ora     *dbpkg.Oracle
+	syncSvc *syncsvc.Service
 }
 
-func NewServer(cfg config.Config, pg *dbpkg.Postgres) *Server {
-	return &Server{cfg: cfg, pg: pg}
+func NewServer(cfg config.Config, pg *dbpkg.Postgres, ora *dbpkg.Oracle) *Server {
+	var syncService *syncsvc.Service
+	if ora != nil {
+		syncService = syncsvc.NewService(ora, pg)
+	}
+	return &Server{
+		cfg:     cfg,
+		pg:      pg,
+		ora:     ora,
+		syncSvc: syncService,
+	}
 }
 
 // Router constructs a Gin engine with routes.
@@ -33,6 +46,8 @@ func (s *Server) Router() *gin.Engine {
 		c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 		c.Writer.Header().Set("Cache-Control", "no-store")
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -52,6 +67,7 @@ func (s *Server) Router() *gin.Engine {
 		// Admin/stub endpoints for frontend integration
 		v1.POST("/sync/init", s.pSyncInit)
 		v1.POST("/sync/monthly", s.pSyncMonthly)
+		v1.GET("/sync/logs", s.gSyncLogs)
 		v1.GET("/config", s.gConfig)
 	}
 	return r
@@ -412,89 +428,292 @@ func (s *Server) gDetailsSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ym": ym, "branch": branch, "total": total, "zeroed": zeroed, "active": total - zeroed, "sum_present_water_usg": sum})
 }
 
-// pSyncInit is a stub implementation of a one-shot yearly init trigger.
-// It validates input and returns a shaped response without executing jobs.
+// pSyncInit triggers yearly initialization sync for specified branches.
 func (s *Server) pSyncInit(c *gin.Context) {
-    var req struct {
-        Branches []string `json:"branches"`
-        DebtYM   string   `json:"debt_ym"`
-    }
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
-        return
-    }
-    // Default branches from config if not provided
-    branches := req.Branches
-    if len(branches) == 0 {
-        branches = s.cfg.Branches
-    }
-    if len(branches) == 0 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "branches are required"})
-        return
-    }
-    // Default DEBT_YM to October of current year
-    debtYM := strings.TrimSpace(req.DebtYM)
-    if debtYM == "" {
-        debtYM = fmt.Sprintf("%04d10", time.Now().Year())
-    }
-    fiscal, err := parseFiscalOrYM("", debtYM)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid debt_ym; expect YYYYMM"})
-        return
-    }
-    now := time.Now().UTC()
-    c.JSON(http.StatusOK, gin.H{
-        "fiscal_year": fiscal,
-        "branches":    branches,
-        "debt_ym":     debtYM,
-        "stats":       gin.H{"upserted": 0},
-        "started_at":  now.Format(time.RFC3339),
-        "finished_at": now.Format(time.RFC3339),
-        "note":        "stub only; no jobs executed",
-    })
+	var req struct {
+		Branches []string `json:"branches"`
+		DebtYM   string   `json:"debt_ym"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+
+	// Check if sync service is available
+	if s.syncSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sync service not available (Oracle not configured)"})
+		return
+	}
+
+	// Default branches from config if not provided
+	branches := req.Branches
+	if len(branches) == 0 {
+		branches = s.cfg.Branches
+	}
+	if len(branches) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "branches are required"})
+		return
+	}
+
+	// Default DEBT_YM to October of current year
+	debtYM := strings.TrimSpace(req.DebtYM)
+	if debtYM == "" {
+		debtYM = fmt.Sprintf("%04d10", time.Now().Year())
+	}
+
+	// Normalize to Gregorian YM
+	ymGreg, err := normalizeGregorianYM(debtYM)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid debt_ym; expect YYYYMM"})
+		return
+	}
+
+	// Convert to Thai YM for Oracle query
+	thaiYM, err := toThaiYM(ymGreg)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to convert to Thai calendar"})
+		return
+	}
+
+	fiscal, err := parseFiscalOrYM("", ymGreg)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid debt_ym"})
+		return
+	}
+
+	started := time.Now()
+	ctx := c.Request.Context()
+
+	// Execute sync for each branch concurrently
+	type result struct {
+		branch   string
+		upserted int
+		zeroed   int
+		err      error
+	}
+	results := make(chan result, len(branches))
+	var wg sync.WaitGroup
+
+	for _, branch := range branches {
+		wg.Add(1)
+		go func(b string) {
+			defer wg.Done()
+			upserted, zeroed, err := s.syncSvc.InitCustcodes(ctx, fiscal, strings.TrimSpace(b), thaiYM, "api")
+			results <- result{branch: b, upserted: upserted, zeroed: zeroed, err: err}
+		}(branch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	var failedBranches []string
+	var lastError error
+	totalUpserted := 0
+	totalZeroed := 0
+	for res := range results {
+		if res.err != nil {
+			failedBranches = append(failedBranches, res.branch)
+			lastError = res.err
+		} else {
+			totalUpserted += res.upserted
+			totalZeroed += res.zeroed
+		}
+	}
+
+	finished := time.Now()
+
+	if len(failedBranches) > 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"fiscal_year":     fiscal,
+			"branches":        branches,
+			"debt_ym":         debtYM,
+			"failed_branches": failedBranches,
+			"error":           lastError.Error(),
+			"started_at":      started.Format(time.RFC3339),
+			"finished_at":     finished.Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Success response
+	c.JSON(http.StatusOK, gin.H{
+		"fiscal_year": fiscal,
+		"branches":    branches,
+		"debt_ym":     debtYM,
+		"stats":       gin.H{"upserted": totalUpserted, "zeroed": totalZeroed},
+		"started_at":  started.Format(time.RFC3339),
+		"finished_at": finished.Format(time.RFC3339),
+	})
 }
 
-// pSyncMonthly is a stub implementation of a one-shot monthly details trigger.
-// It validates input and returns a shaped response without executing jobs.
+// pSyncMonthly triggers monthly details sync for specified branches.
 func (s *Server) pSyncMonthly(c *gin.Context) {
-    var req struct {
-        Branches []string `json:"branches"`
-        YM       string   `json:"ym"`
-    }
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
-        return
-    }
-    branches := req.Branches
-    if len(branches) == 0 {
-        branches = s.cfg.Branches
-    }
-    if len(branches) == 0 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "branches are required"})
-        return
-    }
-    ym := strings.TrimSpace(req.YM)
-    if len(ym) != 6 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "ym is required (YYYYMM)"})
-        return
-    }
-    if _, err := strconv.Atoi(ym[:4]); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ym year"})
-        return
-    }
-    if m, err := strconv.Atoi(ym[4:]); err != nil || m < 1 || m > 12 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ym month"})
-        return
-    }
-    now := time.Now().UTC()
-    c.JSON(http.StatusOK, gin.H{
-        "ym":          ym,
-        "branches":    branches,
-        "stats":       gin.H{"upserted": 0, "zeroed": 0},
-        "started_at":  now.Format(time.RFC3339),
-        "finished_at": now.Format(time.RFC3339),
-        "note":        "stub only; no jobs executed",
-    })
+	var req struct {
+		Branches  []string `json:"branches"`
+		YM        string   `json:"ym"`
+		BatchSize int      `json:"batch_size,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON body"})
+		return
+	}
+
+	// Check if sync service is available
+	if s.syncSvc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sync service not available (Oracle not configured)"})
+		return
+	}
+
+	branches := req.Branches
+	if len(branches) == 0 {
+		branches = s.cfg.Branches
+	}
+	if len(branches) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "branches are required"})
+		return
+	}
+
+	ym := strings.TrimSpace(req.YM)
+	if len(ym) != 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ym is required (YYYYMM)"})
+		return
+	}
+	if _, err := strconv.Atoi(ym[:4]); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ym year"})
+		return
+	}
+	if m, err := strconv.Atoi(ym[4:]); err != nil || m < 1 || m > 12 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ym month"})
+		return
+	}
+
+	batchSize := req.BatchSize
+	if batchSize <= 0 {
+		batchSize = 100 // default
+	}
+
+	started := time.Now()
+	ctx := c.Request.Context()
+
+	// Execute sync for each branch concurrently
+	type result struct {
+		branch   string
+		upserted int
+		zeroed   int
+		err      error
+	}
+	results := make(chan result, len(branches))
+	var wg sync.WaitGroup
+
+	for _, branch := range branches {
+		wg.Add(1)
+		go func(b string) {
+			defer wg.Done()
+			upserted, zeroed, err := s.syncSvc.MonthlyDetails(ctx, ym, strings.TrimSpace(b), batchSize, "api")
+			results <- result{branch: b, upserted: upserted, zeroed: zeroed, err: err}
+		}(branch)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	var failedBranches []string
+	var lastError error
+	totalUpserted := 0
+	totalZeroed := 0
+	for res := range results {
+		if res.err != nil {
+			failedBranches = append(failedBranches, res.branch)
+			lastError = res.err
+		} else {
+			totalUpserted += res.upserted
+			totalZeroed += res.zeroed
+		}
+	}
+
+	finished := time.Now()
+
+	if len(failedBranches) > 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ym":              ym,
+			"branches":        branches,
+			"failed_branches": failedBranches,
+			"error":           lastError.Error(),
+			"started_at":      started.Format(time.RFC3339),
+			"finished_at":     finished.Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Success response
+	c.JSON(http.StatusOK, gin.H{
+		"ym":          ym,
+		"branches":    branches,
+		"stats":       gin.H{"upserted": totalUpserted, "zeroed": totalZeroed},
+		"started_at":  started.Format(time.RFC3339),
+		"finished_at": finished.Format(time.RFC3339),
+	})
+}
+
+// gSyncLogs returns sync operation logs with optional filtering
+func (s *Server) gSyncLogs(c *gin.Context) {
+	if s.syncSvc == nil || s.syncSvc.LogRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "sync logs not available"})
+		return
+	}
+
+	// Parse query parameters
+	branchCode := c.Query("branch")
+	syncType := c.Query("sync_type")
+	status := c.Query("status")
+
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	// Build filter
+	filter := syncsvc.ListSyncLogsFilter{
+		Limit:  limit,
+		Offset: offset,
+	}
+	if branchCode != "" {
+		filter.BranchCode = &branchCode
+	}
+	if syncType != "" {
+		filter.SyncType = &syncType
+	}
+	if status != "" {
+		filter.Status = &status
+	}
+
+	logs, total, err := s.syncSvc.LogRepo.ListSyncLogs(c.Request.Context(), filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items":  logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // gConfig returns a read-only snapshot of key configuration values.
@@ -596,4 +815,38 @@ func multiValues(q map[string][]string, key string) []string {
 		}
 	}
 	return out
+}
+
+// Helper functions for date conversion (from cmd/sync/main.go)
+
+// normalizeGregorianYM converts a YYYYMM to Gregorian if it's Thai Buddhist calendar
+func normalizeGregorianYM(ym string) (string, error) {
+	if len(ym) != 6 {
+		return "", fmt.Errorf("invalid ym; expect YYYYMM")
+	}
+	y, err := strconv.Atoi(ym[:4])
+	if err != nil {
+		return "", fmt.Errorf("invalid ym year")
+	}
+	m, err := strconv.Atoi(ym[4:])
+	if err != nil || m < 1 || m > 12 {
+		return "", fmt.Errorf("invalid ym month")
+	}
+	if y >= 2400 { // Thai -> convert to Gregorian
+		y -= 543
+	}
+	return fmt.Sprintf("%04d%02d", y, m), nil
+}
+
+// toThaiYM converts a Gregorian YYYYMM to Thai (Buddhist) YYYYMM by adding 543 to the year
+func toThaiYM(ym string) (string, error) {
+	if len(ym) != 6 {
+		return "", fmt.Errorf("invalid ym")
+	}
+	y, err := strconv.Atoi(ym[:4])
+	if err != nil {
+		return "", fmt.Errorf("invalid ym year")
+	}
+	mm := ym[4:]
+	return fmt.Sprintf("%d%s", y+543, mm), nil
 }

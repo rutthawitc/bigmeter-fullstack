@@ -18,10 +18,15 @@ import (
 type Service struct {
 	Oracle   *dbpkg.Oracle
 	Postgres *dbpkg.Postgres
+	LogRepo  *LogRepository
 }
 
 func NewService(ora *dbpkg.Oracle, pg *dbpkg.Postgres) *Service {
-	return &Service{Oracle: ora, Postgres: pg}
+	return &Service{
+		Oracle:   ora,
+		Postgres: pg,
+		LogRepo:  NewLogRepository(pg.Pool),
+	}
 }
 
 // OraTest pings Oracle and logs a simple count to validate connectivity.
@@ -50,23 +55,43 @@ func (s *Service) OraTest(ctx context.Context, branch string, debtYM string) err
 }
 
 // InitCustcodes runs the minimal unique-200 SQL and upserts into bm_custcode_init.
-func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch string, debtYM string) error {
+func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch string, debtYM string, triggeredBy string) (int, int, error) {
 	started := time.Now()
 	status := "success"
 	defer func() { observeJob("yearly_init", branch, status, started) }()
+
+	// Record sync start
+	var logID int64
+	var logErr error
+	if s.LogRepo != nil {
+		logID, logErr = s.LogRepo.RecordSyncStart(ctx, "yearly_init", branch, triggeredBy, nil, &debtYM, &fiscalYear)
+		if logErr != nil {
+			log.Printf("warning: failed to record sync start: %v", logErr)
+		}
+	}
+
 	q, err := os.ReadFile(filepath.Join("sqls", "200-meter-minimal.sql"))
 	if err != nil {
-		return fmt.Errorf("read minimal sql: %w", err)
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, fmt.Errorf("read minimal sql: %w", err)
 	}
 	rows, err := s.Oracle.DB.QueryContext(ctx, string(q), sql.Named("ORG_OWNER_ID", branch), sql.Named("DEBT_YM", debtYM))
 	if err != nil {
-		return fmt.Errorf("oracle query minimal: %w", err)
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, fmt.Errorf("oracle query minimal: %w", err)
 	}
 	defer rows.Close()
 
 	tx, err := s.Postgres.Pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("pg begin: %w", err)
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, fmt.Errorf("pg begin: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -99,21 +124,30 @@ func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch stri
 			&meterNo, &sizeName, &brandName, &meterState, &debtYMCol,
 		); err != nil {
 			status = "error"
-			return fmt.Errorf("scan minimal: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("scan minimal: %w", err)
 		}
 		if _, err := tx.Exec(ctx, insert,
 			fiscalYear, branch, orgName.String, custCode.String, useType.String, useName.String, custName.String, custAddress.String, routeCode.String,
 			meterNo.String, sizeName.String, brandName.String, meterState.String, debtYMCol.String,
 		); err != nil {
 			status = "error"
-			return fmt.Errorf("pg insert minimal: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("pg insert minimal: %w", err)
 		}
 		count++
 		keep = append(keep, custCode.String)
 	}
 	if err := rows.Err(); err != nil {
 		status = "error"
-		return err
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, err
 	}
 	// Prune extras not in current top-200 cohort for this branch+fiscal
 	if len(keep) > 0 {
@@ -128,7 +162,10 @@ func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch stri
 		del := "DELETE FROM bm_custcode_init WHERE fiscal_year=$1 AND branch_code=$2 AND cust_code NOT IN (" + strings.Join(ph, ",") + ")"
 		if ct, err := tx.Exec(ctx, del, args...); err != nil {
 			status = "error"
-			return fmt.Errorf("pg prune extras: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("pg prune extras: %w", err)
 		} else {
 			if n := ct.RowsAffected(); n > 0 {
 				log.Printf("init: branch=%s fiscal=%d pruned=%d extras", branch, fiscalYear, n)
@@ -137,29 +174,50 @@ func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch stri
 	}
 	if err := tx.Commit(ctx); err != nil {
 		status = "error"
-		return err
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, err
 	}
 	log.Printf("init: branch=%s fiscal=%d debt_ym=%s upserted=%d", branch, fiscalYear, debtYM, count)
 	addRows("yearly_init", branch, "upserted", count)
-	return nil
+
+	// Record sync success
+	if s.LogRepo != nil && logID > 0 {
+		if err := s.LogRepo.UpdateSyncSuccess(ctx, logID, count, 0); err != nil {
+			log.Printf("warning: failed to update sync log: %v", err)
+		}
+	}
+
+	return count, 0, nil
 }
 
 // MonthlyDetails loads monthly details for a given YYYYMM and branch, filtered to the
 // cohort captured in bm_custcode_init for the fiscal year of that month.
 // It batches cust_codes to avoid overly large IN clauses, upserts rows into bm_meter_details,
 // and inserts "zeroed" rows for cohort custcodes that return no Oracle rows for the given month.
-func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, batchSize int) error {
+func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, batchSize int, triggeredBy string) (int, int, error) {
 	started := time.Now()
 	status := "success"
 	defer func() { observeJob("monthly_details", branch, status, started) }()
 	if len(ym) != 6 {
-		return fmt.Errorf("invalid ym; expect YYYYMM")
+		return 0, 0, fmt.Errorf("invalid ym; expect YYYYMM")
 	}
 	thaiYM, err := toThaiYM(ym)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	fiscal := fiscalYearFromYM(ym)
+
+	// Record sync start
+	var logID int64
+	var logErr error
+	if s.LogRepo != nil {
+		logID, logErr = s.LogRepo.RecordSyncStart(ctx, "monthly_sync", branch, triggeredBy, &ym, nil, &fiscal)
+		if logErr != nil {
+			log.Printf("warning: failed to record sync start: %v", logErr)
+		}
+	}
 
 	// Load cohort from Postgres
 	// Also keep snapshot text fields for zeroed rows (use_type, meter_no, meter_state)
@@ -167,7 +225,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
                      FROM bm_custcode_init WHERE fiscal_year=$1 AND branch_code=$2`
 	rows, err := s.Postgres.Pool.Query(ctx, qCohort, fiscal, branch)
 	if err != nil {
-		return fmt.Errorf("pg select cohort: %w", err)
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, fmt.Errorf("pg select cohort: %w", err)
 	}
 	defer rows.Close()
 	var cohort []string
@@ -175,17 +236,27 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 	for rows.Next() {
 		var cc, ut, mn, ms string
 		if err := rows.Scan(&cc, &ut, &mn, &ms); err != nil {
-			return fmt.Errorf("scan cohort: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("scan cohort: %w", err)
 		}
 		cohort = append(cohort, cc)
 		snap[cc] = [3]string{ut, mn, ms}
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, err
 	}
 	if len(cohort) == 0 {
 		log.Printf("month: ym=%s branch=%s fiscal=%d cohort=0 (skip)", ym, branch, fiscal)
-		return nil
+		// Record success with 0 counts
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncSuccess(ctx, logID, 0, 0)
+		}
+		return 0, 0, nil
 	}
 
 	// Prune any existing details rows for this ym+branch that are not in the cohort.
@@ -202,7 +273,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 		del := "DELETE FROM bm_meter_details WHERE year_month=$1 AND branch_code=$2 AND cust_code NOT IN (" + strings.Join(ph, ",") + ")"
 		if ct, err := s.Postgres.Pool.Exec(ctx, del, args...); err != nil {
 			status = "error"
-			return fmt.Errorf("pg prune details extras: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("pg prune details extras: %w", err)
 		} else if n := ct.RowsAffected(); n > 0 {
 			log.Printf("month: ym=%s branch=%s pruned_details=%d", ym, branch, n)
 		}
@@ -211,7 +285,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 	// Load SQL template and prepare base
 	b, err := os.ReadFile(filepath.Join("sqls", "200-meter-details.sql"))
 	if err != nil {
-		return fmt.Errorf("read details sql: %w", err)
+		if s.LogRepo != nil && logID > 0 {
+			s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+		}
+		return 0, 0, fmt.Errorf("read details sql: %w", err)
 	}
 	baseSQL := string(b)
 	// Remove any FETCH FIRST ...
@@ -242,7 +319,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 		orows, err := s.Oracle.DB.QueryContext(ctx, sqlText, args...)
 		if err != nil {
 			status = "error"
-			return fmt.Errorf("oracle details batch %d-%d: %w", i, end, err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("oracle details batch %d-%d: %w", i, end, err)
 		}
 
 		// Track which custcodes returned data
@@ -253,14 +333,17 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 		if err != nil {
 			orows.Close()
 			status = "error"
-			return fmt.Errorf("pg begin: %w", err)
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, fmt.Errorf("pg begin: %w", err)
 		}
 
 		upsert := `INSERT INTO bm_meter_details (
-                        year_month, branch_code, org_name, cust_code, use_type, use_name, cust_name, address, route_code,
+                        fiscal_year, year_month, branch_code, org_name, cust_code, use_type, use_name, cust_name, address, route_code,
                         meter_no, meter_size, meter_brand, meter_state, average, present_meter_count, present_water_usg, debt_ym)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-                    ON CONFLICT (year_month, branch_code, cust_code) DO UPDATE SET
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                    ON CONFLICT (fiscal_year, year_month, branch_code, cust_code) DO UPDATE SET
                         org_name=EXCLUDED.org_name,
                         use_type=EXCLUDED.use_type,
                         use_name=EXCLUDED.use_name,
@@ -283,11 +366,14 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 				orows.Close()
 				tx.Rollback(ctx)
 				status = "error"
-				return fmt.Errorf("scan details: %w", err)
+				if s.LogRepo != nil && logID > 0 {
+					s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+				}
+				return 0, 0, fmt.Errorf("scan details: %w", err)
 			}
 			seen[cust.String] = true
 			if _, err := tx.Exec(ctx, upsert,
-				ym, branch,
+				fiscal, ym, branch,
 				nil,                     /* org_name */
 				cust.String,             /* cust_code */
 				nil, nil, nil, nil, nil, /* use_type, use_name, cust_name, address, route_code */
@@ -298,7 +384,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 				orows.Close()
 				tx.Rollback(ctx)
 				status = "error"
-				return fmt.Errorf("pg upsert details: %w", err)
+				if s.LogRepo != nil && logID > 0 {
+					s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+				}
+				return 0, 0, fmt.Errorf("pg upsert details: %w", err)
 			}
 			totalUpserts++
 		}
@@ -306,7 +395,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 			orows.Close()
 			tx.Rollback(ctx)
 			status = "error"
-			return err
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, err
 		}
 		orows.Close()
 
@@ -317,19 +409,25 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 			}
 			snapv := snap[c]
 			if _, err := tx.Exec(ctx, upsert,
-				ym, branch, "", c, snapv[0], "", "", "", "", snapv[1], "", "", snapv[2],
+				fiscal, ym, branch, "", c, snapv[0], "", "", "", "", snapv[1], "", "", snapv[2],
 				0.0, 0.0, 0.0, thaiYM,
 			); err != nil {
 				tx.Rollback(ctx)
 				status = "error"
-				return fmt.Errorf("pg upsert zeroed: %w", err)
+				if s.LogRepo != nil && logID > 0 {
+					s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+				}
+				return 0, 0, fmt.Errorf("pg upsert zeroed: %w", err)
 			}
 			totalZeroed++
 		}
 
 		if err := tx.Commit(ctx); err != nil {
 			status = "error"
-			return err
+			if s.LogRepo != nil && logID > 0 {
+				s.LogRepo.UpdateSyncError(ctx, logID, err.Error())
+			}
+			return 0, 0, err
 		}
 		batchCount++
 		log.Printf("month: ym=%s branch=%s batch=%d-%d upserted=%d zeroed=%d", ym, branch, i, end-1, totalUpserts, totalZeroed)
@@ -338,7 +436,15 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 	addRows("monthly_details", branch, "upserted", totalUpserts)
 	addRows("monthly_details", branch, "zeroed", totalZeroed)
 	incBatches("monthly_details", branch, batchCount)
-	return nil
+
+	// Record sync success
+	if s.LogRepo != nil && logID > 0 {
+		if err := s.LogRepo.UpdateSyncSuccess(ctx, logID, totalUpserts, totalZeroed); err != nil {
+			log.Printf("warning: failed to update sync log: %v", err)
+		}
+	}
+
+	return totalUpserts, totalZeroed, nil
 }
 
 // helpers for monthly

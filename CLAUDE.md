@@ -125,6 +125,7 @@ pnpm format
    - `bm_branches` - Branch metadata
    - `bm_custcode_init` - Yearly customer cohort (top-200)
    - `bm_meter_details` - Monthly usage records
+   - `bm_sync_logs` - Sync operation history and monitoring
 
 ### Data Flow
 
@@ -182,6 +183,29 @@ The sync service (`cmd/sync/main.go`) supports multiple modes via `MODE` env var
 - `useQueries` fetches multiple months of data simultaneously (up to 12 months)
 - Lazy-loads Excel export library to reduce bundle size (~700KB savings)
 
+### Sync Operation Logging
+
+**Purpose**: Track all sync operations for monitoring, debugging, and audit trail
+
+**Features**:
+- Automatic logging of every sync operation (yearly init and monthly sync)
+- Records: status (success/error/in_progress), duration, record counts, error messages
+- Tracks trigger source: `api` (manual via admin UI), `scheduler` (cron job), `manual` (CLI)
+- Admin UI displays real-time sync history with auto-refresh every 10 seconds
+- Color-coded status badges and performance metrics
+
+**Implementation**:
+- Backend: `internal/sync/log.go` (LogRepository), `internal/sync/service.go` (logging integration)
+- Frontend: `src/api/syncLogs.ts` (API client), `src/screens/AdminPage.tsx` (sync logs table)
+- Database: `bm_sync_logs` table with indexes on branch_code, sync_type, status, created_at
+
+**Admin Page Features**:
+- View last 20 sync operations with full details
+- Filter by branch, type, or status (via API query params)
+- See actual upserted/zeroed record counts
+- Monitor operation duration and success rate
+- Automatically refreshes after triggering new sync operations
+
 ### API Endpoints
 
 Base URL: `http://localhost:8089/api/v1`
@@ -190,8 +214,12 @@ Base URL: `http://localhost:8089/api/v1`
 - `GET /branches?q=&limit=&offset=` - List branches
 - `GET /custcodes?branch=&ym=&fiscal_year=&q=&limit=&offset=` - Customer codes
 - `GET /details?ym=&branch=&q=&limit=&offset=&order_by=&sort=` - Usage details
-- `POST /sync/init` - Trigger yearly sync (body: `{"fiscal_year": 2025, "branch_code": "BA01", "debt_ym": "256710"}`)
-- `POST /sync/monthly` - Trigger monthly sync (body: `{"year_month": "202501", "branch_code": "BA01", "batch_size": 100}`)
+- `POST /sync/init` - Trigger yearly sync (body: `{"branches": ["BA01"], "debt_ym": "202410"}`)
+  - Returns: `{"fiscal_year": 2025, "branches": [...], "stats": {"upserted": 199, "zeroed": 0}, "started_at": "...", "finished_at": "..."}`
+- `POST /sync/monthly` - Trigger monthly sync (body: `{"branches": ["BA01"], "ym": "202501", "batch_size": 100}`)
+  - Returns: `{"ym": "202501", "branches": [...], "stats": {"upserted": 199, "zeroed": 5}, "started_at": "...", "finished_at": "..."}`
+- `GET /sync/logs?branch=&sync_type=&status=&limit=&offset=` - Retrieve sync operation logs
+  - Returns: `{"items": [...], "total": 1, "limit": 50, "offset": 0}`
 
 ## Database Schema
 
@@ -211,6 +239,23 @@ Base URL: `http://localhost:8089/api/v1`
 - `branch_code` (PK) - Branch code
 - `cust_code` (PK) - Customer code
 - `org_name`, `use_type`, `use_name`, `cust_name`, `address`, `meter_no`, `present_water_usg`, `average`, etc.
+
+### bm_sync_logs
+- `id` (PK) - Auto-incrementing log ID
+- `sync_type` - 'yearly_init' or 'monthly_sync'
+- `branch_code` - Branch code for this operation
+- `year_month` - YYYYMM (for monthly_sync)
+- `fiscal_year` - Fiscal year (for yearly_init)
+- `debt_ym` - Thai Buddhist YYYYMM (for yearly_init)
+- `status` - 'success', 'error', or 'in_progress'
+- `started_at` - Operation start timestamp
+- `finished_at` - Operation completion timestamp
+- `duration_ms` - Duration in milliseconds
+- `records_upserted` - Number of records inserted/updated
+- `records_zeroed` - Number of zeroed records (monthly_sync)
+- `error_message` - Error details if failed
+- `triggered_by` - 'api', 'scheduler', or 'manual'
+- `created_at` - Log creation timestamp
 
 ## Important Conventions
 

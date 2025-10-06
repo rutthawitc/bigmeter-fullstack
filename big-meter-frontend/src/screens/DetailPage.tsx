@@ -6,6 +6,7 @@ import { getCustCodes } from "../api/custcodes";
 import { getDetails } from "../api/details";
 import type { DetailItem } from "../api/details";
 import { useAuth } from "../lib/auth";
+import { useIsAdmin } from "../lib/useIsAdmin";
 import { useMediaQuery } from "../lib/useMediaQuery";
 import { useToast } from "../lib/useToast";
 import { FilterSection } from "../components/DetailPage/FilterSection";
@@ -44,6 +45,7 @@ type KnownError = Error & { status?: number };
 export default function DetailPage() {
   const navigate = useNavigate();
   const { user, hydrated, logout: signOut } = useAuth();
+  const isAdmin = useIsAdmin();
   const { showToast } = useToast();
   const [branch, setBranch] = useState("");
   const [latestYm, setLatestYm] = useState(() => defaultLatestYm());
@@ -263,6 +265,15 @@ export default function DetailPage() {
               <div className="font-semibold text-slate-700">{user.firstname}</div>
               <div className="text-xs text-slate-500">{user.username}</div>
             </div>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate("/admin")}
+                className="rounded-md border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+              >
+                จัดการระบบ
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSignOut}

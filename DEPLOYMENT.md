@@ -3,6 +3,7 @@
 This guide explains how to deploy Big Meter to a production server using pre-built Docker images.
 
 ## Table of Contents
+
 1. [Prerequisites](#prerequisites)
 2. [Build and Push Images](#build-and-push-images)
 3. [Production Server Setup](#production-server-setup)
@@ -15,11 +16,13 @@ This guide explains how to deploy Big Meter to a production server using pre-bui
 ## Prerequisites
 
 ### On Build Server (CI/CD or Development Machine)
+
 - Docker installed
 - Access to source code repository
 - Access to Docker registry (Docker Hub, AWS ECR, Google GCR, etc.)
 
 ### On Production Server
+
 - Docker installed (version 20.10+)
 - Docker Compose installed (version 2.0+)
 - Network access to:
@@ -209,7 +212,7 @@ echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
 cd /opt/bigmeter
 
 # Pull all images
-docker-compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml pull
 
 # Verify images
 docker images | grep bigmeter
@@ -219,24 +222,24 @@ docker images | grep bigmeter
 
 ```bash
 # Run migrations and seed branches
-docker-compose -f docker-compose.prod.yml --profile setup up migrate seed_branches
+docker  compose -f docker-compose.prod.yml --profile setup up migrate seed_branches
 
 # Wait for completion, then check logs
-docker-compose -f docker-compose.prod.yml --profile setup logs migrate
-docker-compose -f docker-compose.prod.yml --profile setup logs seed_branches
+docker compose -f docker-compose.prod.yml --profile setup logs migrate
+docker compose -f docker-compose.prod.yml --profile setup logs seed_branches
 ```
 
 ### Step 3: Start Application Services
 
 ```bash
 # Start all services in background
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 # Check service status
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 # View logs
-docker-compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f
 ```
 
 ### Step 4: Verify Deployment
@@ -249,10 +252,10 @@ curl http://localhost:8089/api/v1/healthz
 curl http://localhost:3000
 
 # Check database
-docker-compose -f docker-compose.prod.yml exec postgres psql -U postgres -d bigmeter -c "\dt"
+docker compose -f docker-compose.prod.yml exec postgres psql -U postgres -d bigmeter -c "\dt"
 
 # Check sync service logs
-docker-compose -f docker-compose.prod.yml logs sync
+docker compose -f docker-compose.prod.yml logs sync
 ```
 
 ---
@@ -471,6 +474,7 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 ## Production Checklist
 
 ### Pre-Deployment
+
 - [ ] Build and test all Docker images
 - [ ] Push images to registry
 - [ ] Verify image tags and registry access
@@ -479,6 +483,7 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 - [ ] Test Oracle connectivity from production network
 
 ### Deployment
+
 - [ ] Create deployment directory structure
 - [ ] Copy `docker-compose.prod.yml` and migrations
 - [ ] Configure environment variables
@@ -489,6 +494,7 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 - [ ] Verify health endpoints
 
 ### Post-Deployment
+
 - [ ] Configure firewall rules (ports 3000, 8089, 5432)
 - [ ] Set up reverse proxy (nginx/traefik) with SSL/TLS
 - [ ] Configure log rotation
@@ -498,6 +504,7 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 - [ ] Test disaster recovery process
 
 ### Security
+
 - [ ] Use strong passwords for all services
 - [ ] Restrict PostgreSQL port (remove public exposure)
 - [ ] Enable SSL for PostgreSQL connections
@@ -511,35 +518,35 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 
 ## Environment Variables Reference
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DOCKER_REGISTRY` | Yes | - | Docker registry URL |
-| `IMAGE_TAG` | No | `latest` | Image version tag |
-| `POSTGRES_USER` | Yes | `postgres` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | Yes | - | PostgreSQL password |
-| `POSTGRES_DB` | Yes | `bigmeter` | Database name |
-| `TIMEZONE` | No | `Asia/Bangkok` | Server timezone |
-| `PORT` | No | `8089` | API server port |
-| `ORACLE_DSN` | Yes (sync) | - | Oracle connection string |
-| `BRANCHES` | Yes | - | Comma-separated branch codes |
-| `MODE` | No | empty | Sync mode: `init-once`, `month-once`, `ora-test` |
-| `SYNC_CONCURRENCY` | No | `2` | Number of concurrent sync jobs |
-| `SYNC_RETRIES` | No | `2` | Number of retry attempts |
-| `SYNC_RETRY_DELAY` | No | `10s` | Delay between retries |
-| `BATCH_SIZE` | No | `100` | Batch size for Oracle queries |
-| `METRICS_ADDR` | No | - | Prometheus metrics address |
-| `METRICS_PORT` | No | `9090` | Prometheus metrics port |
-| `ENABLE_YEARLY_INIT` | No | `true` | Enable yearly cohort init cron job |
-| `ENABLE_MONTHLY_SYNC` | No | `true` | Enable monthly sync cron job |
-| `TELEGRAM_ENABLED` | No | `false` | Enable Telegram notifications |
-| `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot API token |
-| `TELEGRAM_CHAT_ID` | No | `0` | Telegram chat/group ID (negative for groups) |
-| `TELEGRAM_YEARLY_PREFIX` | No | Default | Prefix for yearly sync messages |
-| `TELEGRAM_MONTHLY_PREFIX` | No | Default | Prefix for monthly sync messages |
-| `TELEGRAM_YEARLY_SUCCESS` | No | Default | Success message template for yearly |
-| `TELEGRAM_YEARLY_FAILURE` | No | Default | Failure message template for yearly |
-| `TELEGRAM_MONTHLY_SUCCESS` | No | Default | Success message template for monthly |
-| `TELEGRAM_MONTHLY_FAILURE` | No | Default | Failure message template for monthly |
+| Variable                   | Required   | Default        | Description                                      |
+| -------------------------- | ---------- | -------------- | ------------------------------------------------ |
+| `DOCKER_REGISTRY`          | Yes        | -              | Docker registry URL                              |
+| `IMAGE_TAG`                | No         | `latest`       | Image version tag                                |
+| `POSTGRES_USER`            | Yes        | `postgres`     | PostgreSQL username                              |
+| `POSTGRES_PASSWORD`        | Yes        | -              | PostgreSQL password                              |
+| `POSTGRES_DB`              | Yes        | `bigmeter`     | Database name                                    |
+| `TIMEZONE`                 | No         | `Asia/Bangkok` | Server timezone                                  |
+| `PORT`                     | No         | `8089`         | API server port                                  |
+| `ORACLE_DSN`               | Yes (sync) | -              | Oracle connection string                         |
+| `BRANCHES`                 | Yes        | -              | Comma-separated branch codes                     |
+| `MODE`                     | No         | empty          | Sync mode: `init-once`, `month-once`, `ora-test` |
+| `SYNC_CONCURRENCY`         | No         | `2`            | Number of concurrent sync jobs                   |
+| `SYNC_RETRIES`             | No         | `2`            | Number of retry attempts                         |
+| `SYNC_RETRY_DELAY`         | No         | `10s`          | Delay between retries                            |
+| `BATCH_SIZE`               | No         | `100`          | Batch size for Oracle queries                    |
+| `METRICS_ADDR`             | No         | -              | Prometheus metrics address                       |
+| `METRICS_PORT`             | No         | `9090`         | Prometheus metrics port                          |
+| `ENABLE_YEARLY_INIT`       | No         | `true`         | Enable yearly cohort init cron job               |
+| `ENABLE_MONTHLY_SYNC`      | No         | `true`         | Enable monthly sync cron job                     |
+| `TELEGRAM_ENABLED`         | No         | `false`        | Enable Telegram notifications                    |
+| `TELEGRAM_BOT_TOKEN`       | No         | -              | Telegram bot API token                           |
+| `TELEGRAM_CHAT_ID`         | No         | `0`            | Telegram chat/group ID (negative for groups)     |
+| `TELEGRAM_YEARLY_PREFIX`   | No         | Default        | Prefix for yearly sync messages                  |
+| `TELEGRAM_MONTHLY_PREFIX`  | No         | Default        | Prefix for monthly sync messages                 |
+| `TELEGRAM_YEARLY_SUCCESS`  | No         | Default        | Success message template for yearly              |
+| `TELEGRAM_YEARLY_FAILURE`  | No         | Default        | Failure message template for yearly              |
+| `TELEGRAM_MONTHLY_SUCCESS` | No         | Default        | Success message template for monthly             |
+| `TELEGRAM_MONTHLY_FAILURE` | No         | Default        | Failure message template for monthly             |
 
 ---
 
@@ -555,12 +562,14 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 ### Step 2: Get Chat ID
 
 **For Private Chat:**
+
 1. Start a chat with your bot
 2. Send any message to the bot
 3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
 4. Look for `"chat":{"id":123456789}` in the JSON response
 
 **For Group Chat:**
+
 1. Create a group and add your bot
 2. Send a message in the group
 3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
@@ -580,6 +589,7 @@ TELEGRAM_CHAT_ID=-1001234567890
 You can customize notification messages using placeholders:
 
 **Available Placeholders:**
+
 - Yearly: `{fiscal_year}`, `{branches}`, `{count}`, `{duration}`, `{timestamp}`, `{failed_branches}`, `{error}`
 - Monthly: `{year_month}`, `{branches}`, `{count}`, `{duration}`, `{timestamp}`, `{failed_branches}`, `{error}`
 
@@ -609,6 +619,7 @@ docker-compose -f docker-compose.prod.yml run --rm \
 ### Notification Examples
 
 **Success Notification:**
+
 ```
 🔄 Big Meter - Yearly Sync
 
@@ -620,6 +631,7 @@ Time: 2025-10-15 22:00:15
 ```
 
 **Failure Notification:**
+
 ```
 🔄 Big Meter - Yearly Sync
 
@@ -634,10 +646,10 @@ Time: 2025-10-15 22:05:30
 
 ```bash
 # Check if Telegram is enabled
-docker-compose -f docker-compose.prod.yml exec sync env | grep TELEGRAM
+docker compose -f docker-compose.prod.yml exec sync env | grep TELEGRAM
 
 # View notification logs
-docker-compose -f docker-compose.prod.yml logs sync | grep telegram
+docker compose -f docker-compose.prod.yml logs sync | grep telegram
 
 # Common issues:
 # - Bot token invalid: Check BotFather for correct token
@@ -651,6 +663,7 @@ docker-compose -f docker-compose.prod.yml logs sync | grep telegram
 ## Support
 
 For issues and questions:
+
 - Check logs: `docker-compose -f docker-compose.prod.yml logs`
 - Review documentation in `go-backend-bigmeter/docs/`
 - Consult `CLAUDE.md` for architecture details
