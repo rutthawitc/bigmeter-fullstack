@@ -42,6 +42,9 @@ export DOCKER_REGISTRY="your-registry.com"  # or docker.io/username
 
 # Optional: Set image tag (default: latest)
 export IMAGE_TAG="v1.0.0"  # or use git commit hash
+
+# Set admin usernames (comma-separated, required for admin page access)
+export VITE_ADMIN_USERNAMES="admin,user1,user2"
 ```
 
 ### Step 2: Login to Docker Registry
@@ -77,8 +80,9 @@ docker build \
   -t ${DOCKER_REGISTRY}/bigmeter-sync:${IMAGE_TAG:-latest} \
   .
 
-# Build Frontend
+# Build Frontend (with admin usernames)
 docker build \
+  --build-arg VITE_ADMIN_USERNAMES=${VITE_ADMIN_USERNAMES:-admin} \
   -t ${DOCKER_REGISTRY}/bigmeter-frontend:${IMAGE_TAG:-latest} \
   ../big-meter-frontend
 ```
@@ -515,6 +519,7 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 | -------------------------- | ---------- | -------------- | ------------------------------------------------ |
 | `DOCKER_REGISTRY`          | Yes        | -              | Docker registry URL                              |
 | `IMAGE_TAG`                | No         | `latest`       | Image version tag                                |
+| `VITE_ADMIN_USERNAMES`     | No         | `admin`        | Comma-separated admin usernames (build-time)     |
 | `POSTGRES_USER`            | Yes        | `postgres`     | PostgreSQL username                              |
 | `POSTGRES_PASSWORD`        | Yes        | -              | PostgreSQL password                              |
 | `POSTGRES_DB`              | Yes        | `bigmeter`     | Database name                                    |
