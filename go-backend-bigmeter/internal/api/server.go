@@ -253,6 +253,10 @@ func (s *Server) gDetails(c *gin.Context) {
 		return
 	}
 
+	// Calculate fiscal year from year_month (YYYYMM format)
+	// Fiscal year: Oct-Dec = year+1, Jan-Sep = year
+	fiscal := fiscalYearFromYM(ym)
+
 	limit, offset := parseLimitOffset(c.Query("limit"), c.Query("offset"))
     orderBy := sanitizeOrderBy(c.Query("order_by"), map[string]string{
         "cust_code":           "cust_code",
@@ -279,8 +283,8 @@ func (s *Server) gDetails(c *gin.Context) {
 	base := `SELECT year_month, branch_code, org_name, cust_code, use_type, use_name, cust_name, address, route_code,
                     meter_no, meter_size, meter_brand, meter_state, average, present_meter_count, present_water_usg,
                     debt_ym, created_at
-             FROM bm_meter_details WHERE year_month=$1 AND branch_code=$2`
-	args := []any{ym, branch}
+             FROM bm_meter_details WHERE fiscal_year=$1 AND year_month=$2 AND branch_code=$3`
+	args := []any{fiscal, ym, branch}
 
 	custs := multiValues(c.Request.URL.Query(), "cust_code")
 	if len(custs) > 0 {
@@ -787,6 +791,20 @@ func parseLimitOffset(limStr, offStr string) (int, int) {
 		}
 	}
 	return limit, offset
+}
+
+func fiscalYearFromYM(ym string) int {
+	// ym format: YYYYMM (e.g., "202410" for October 2024)
+	// Fiscal year: Oct-Dec (months 10-12) = year+1, Jan-Sep (months 1-9) = year
+	if len(ym) != 6 {
+		return 0
+	}
+	year, _ := strconv.Atoi(ym[:4])
+	month, _ := strconv.Atoi(ym[4:6])
+	if month >= 10 {
+		return year + 1
+	}
+	return year
 }
 
 func sanitizeOrderBy(v string, allow map[string]string, def string) string {
