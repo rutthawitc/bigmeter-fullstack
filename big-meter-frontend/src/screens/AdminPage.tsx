@@ -247,7 +247,9 @@ export default function AdminPage() {
                   </p>
                   <p>
                     <strong>Finished:</strong>{" "}
-                    {new Date(yearlyResult.finished_at).toLocaleString("th-TH")}
+                    {yearlyResult.finished_at
+                      ? new Date(yearlyResult.finished_at).toLocaleString("th-TH")
+                      : "In progress..."}
                   </p>
                   {yearlyResult.note && (
                     <p className="text-xs text-green-700 mt-2">
@@ -351,7 +353,9 @@ export default function AdminPage() {
                   </p>
                   <p>
                     <strong>Finished:</strong>{" "}
-                    {new Date(monthlyResult.finished_at).toLocaleString("th-TH")}
+                    {monthlyResult.finished_at
+                      ? new Date(monthlyResult.finished_at).toLocaleString("th-TH")
+                      : "In progress..."}
                   </p>
                   {monthlyResult.note && (
                     <p className="text-xs text-green-700 mt-2">
