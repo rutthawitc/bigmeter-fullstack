@@ -189,9 +189,9 @@ func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch stri
 		}
 	}
 
-	// Auto-backfill last 3 months of usage details for the new cohort
-	log.Printf("init: branch=%s auto-backfilling last 3 months of usage details", branch)
-	if err := s.backfillRecentMonths(ctx, branch, fiscalYear, debtYM, 3, triggeredBy); err != nil {
+	// Auto-backfill last 2 months of usage details for the new cohort (October + September only)
+	log.Printf("init: branch=%s auto-backfilling last 2 months of usage details", branch)
+	if err := s.backfillRecentMonths(ctx, branch, fiscalYear, debtYM, 2, triggeredBy); err != nil {
 		log.Printf("warning: backfill failed for branch=%s: %v", branch, err)
 		// Don't fail the whole init if backfill fails
 	}

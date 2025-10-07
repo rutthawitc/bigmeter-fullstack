@@ -488,42 +488,26 @@ func (s *Server) pSyncInit(c *gin.Context) {
 	started := time.Now()
 	ctx := c.Request.Context()
 
-	// Execute sync for each branch concurrently
-	type result struct {
-		branch   string
-		upserted int
-		zeroed   int
-		err      error
-	}
-	results := make(chan result, len(branches))
-	var wg sync.WaitGroup
-
-	for _, branch := range branches {
-		wg.Add(1)
-		go func(b string) {
-			defer wg.Done()
-			upserted, zeroed, err := s.syncSvc.InitCustcodes(ctx, fiscal, strings.TrimSpace(b), thaiYM, "api")
-			results <- result{branch: b, upserted: upserted, zeroed: zeroed, err: err}
-		}(branch)
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results
+	// Execute sync for each branch sequentially (one at a time)
+	// This avoids Oracle connection pool exhaustion from concurrent queries
 	var failedBranches []string
 	var lastError error
 	totalUpserted := 0
 	totalZeroed := 0
-	for res := range results {
-		if res.err != nil {
-			failedBranches = append(failedBranches, res.branch)
-			lastError = res.err
+
+	for _, branch := range branches {
+		b := strings.TrimSpace(branch)
+		log.Printf("yearly init: processing branch=%s", b)
+		upserted, zeroed, err := s.syncSvc.InitCustcodes(ctx, fiscal, b, thaiYM, "api")
+		if err != nil {
+			log.Printf("yearly init: branch=%s failed: %v", b, err)
+			failedBranches = append(failedBranches, b)
+			lastError = err
+			// Continue with other branches even if one fails
 		} else {
-			totalUpserted += res.upserted
-			totalZeroed += res.zeroed
+			log.Printf("yearly init: branch=%s completed (upserted=%d)", b, upserted)
+			totalUpserted += upserted
+			totalZeroed += zeroed
 		}
 	}
 
@@ -602,42 +586,26 @@ func (s *Server) pSyncMonthly(c *gin.Context) {
 	started := time.Now()
 	ctx := c.Request.Context()
 
-	// Execute sync for each branch concurrently
-	type result struct {
-		branch   string
-		upserted int
-		zeroed   int
-		err      error
-	}
-	results := make(chan result, len(branches))
-	var wg sync.WaitGroup
-
-	for _, branch := range branches {
-		wg.Add(1)
-		go func(b string) {
-			defer wg.Done()
-			upserted, zeroed, err := s.syncSvc.MonthlyDetails(ctx, ym, strings.TrimSpace(b), batchSize, "api")
-			results <- result{branch: b, upserted: upserted, zeroed: zeroed, err: err}
-		}(branch)
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results
+	// Execute sync for each branch sequentially (one at a time)
+	// This avoids Oracle connection pool exhaustion from concurrent queries
 	var failedBranches []string
 	var lastError error
 	totalUpserted := 0
 	totalZeroed := 0
-	for res := range results {
-		if res.err != nil {
-			failedBranches = append(failedBranches, res.branch)
-			lastError = res.err
+
+	for _, branch := range branches {
+		b := strings.TrimSpace(branch)
+		log.Printf("monthly sync: processing branch=%s ym=%s", b, ym)
+		upserted, zeroed, err := s.syncSvc.MonthlyDetails(ctx, ym, b, batchSize, "api")
+		if err != nil {
+			log.Printf("monthly sync: branch=%s ym=%s failed: %v", b, ym, err)
+			failedBranches = append(failedBranches, b)
+			lastError = err
+			// Continue with other branches even if one fails
 		} else {
-			totalUpserted += res.upserted
-			totalZeroed += res.zeroed
+			log.Printf("monthly sync: branch=%s ym=%s completed (upserted=%d, zeroed=%d)", b, ym, upserted, zeroed)
+			totalUpserted += upserted
+			totalZeroed += zeroed
 		}
 	}
 
