@@ -217,34 +217,36 @@ func (s *Service) backfillRecentMonths(ctx context.Context, branch string, fisca
 	}
 
 	// Generate list of months to backfill (going backwards from debt_ym)
+	// debt_ym is in Thai Buddhist format, convert to Gregorian for MonthlyDetails
+	gregorianYear := year - 543
 	months := make([]string, 0, numMonths)
 	for i := 0; i < numMonths; i++ {
 		// Go back i months
 		m := month - i
-		y := year
+		y := gregorianYear
 		for m <= 0 {
 			m += 12
 			y--
 		}
-		// Convert back to Thai Buddhist year for the sync
-		thaiYear := y + 543
-		ym := fmt.Sprintf("%d%02d", thaiYear, m)
+		// MonthlyDetails expects Gregorian YYYYMM
+		ym := fmt.Sprintf("%d%02d", y, m)
 		months = append(months, ym)
 	}
 
-	log.Printf("backfill: branch=%s months=%v", branch, months)
+	log.Printf("backfill: branch=%s fiscal=%d months=%v", branch, fiscalYear, months)
 
-	// Sync each month using MonthlyDetails
+	// Sync each month using MonthlyDetailsWithFiscalYear
+	// Pass the fiscal year so all months use the same cohort
 	batchSize := 100 // Default batch size
 	for _, ym := range months {
-		log.Printf("backfill: branch=%s ym=%s starting", branch, ym)
-		upserted, zeroed, err := s.MonthlyDetails(ctx, ym, branch, batchSize, triggeredBy)
+		log.Printf("backfill: branch=%s ym=%s fiscal=%d starting", branch, ym, fiscalYear)
+		upserted, zeroed, err := s.MonthlyDetailsWithFiscalYear(ctx, ym, branch, batchSize, triggeredBy, fiscalYear)
 		if err != nil {
 			log.Printf("backfill: branch=%s ym=%s failed: %v", branch, ym, err)
 			// Continue with other months even if one fails
 			continue
 		}
-		log.Printf("backfill: branch=%s ym=%s completed (upserted=%d, zeroed=%d)", branch, ym, upserted, zeroed)
+		log.Printf("backfill: branch=%s ym=%s fiscal=%d completed (upserted=%d, zeroed=%d)", branch, ym, fiscalYear, upserted, zeroed)
 	}
 
 	return nil
@@ -255,6 +257,13 @@ func (s *Service) backfillRecentMonths(ctx context.Context, branch string, fisca
 // It batches cust_codes to avoid overly large IN clauses, upserts rows into bm_meter_details,
 // and inserts "zeroed" rows for cohort custcodes that return no Oracle rows for the given month.
 func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, batchSize int, triggeredBy string) (int, int, error) {
+	return s.MonthlyDetailsWithFiscalYear(ctx, ym, branch, batchSize, triggeredBy, 0)
+}
+
+// MonthlyDetailsWithFiscalYear is like MonthlyDetails but allows overriding the fiscal year.
+// If fiscalYearOverride is 0, it calculates fiscal year from ym. Otherwise, uses the override.
+// This is useful for backfilling historical months with a newly created cohort.
+func (s *Service) MonthlyDetailsWithFiscalYear(ctx context.Context, ym string, branch string, batchSize int, triggeredBy string, fiscalYearOverride int) (int, int, error) {
 	started := time.Now()
 	status := "success"
 	defer func() { observeJob("monthly_details", branch, status, started) }()
@@ -265,7 +274,12 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 	if err != nil {
 		return 0, 0, err
 	}
-	fiscal := fiscalYearFromYM(ym)
+
+	// Use override if provided, otherwise calculate from ym
+	fiscal := fiscalYearOverride
+	if fiscal == 0 {
+		fiscal = fiscalYearFromYM(ym)
+	}
 
 	// Record sync start
 	var logID int64
