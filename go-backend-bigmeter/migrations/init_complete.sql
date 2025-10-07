@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS bm_custcode_init (
 );
 
 CREATE TABLE IF NOT EXISTS bm_meter_details (
+  fiscal_year INTEGER NOT NULL,
   year_month VARCHAR(6) NOT NULL,
   branch_code VARCHAR(10) NOT NULL,
   cust_code VARCHAR(50) NOT NULL,
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS bm_meter_details (
   average NUMERIC(18,2),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (year_month, branch_code, cust_code)
+  PRIMARY KEY (fiscal_year, year_month, branch_code, cust_code)
 );
 
 -- =============================================================================
@@ -69,6 +70,9 @@ CREATE INDEX IF NOT EXISTS idx_meter_details_ym
 
 CREATE INDEX IF NOT EXISTS idx_meter_details_ym_branch
   ON bm_meter_details(year_month, branch_code);
+
+CREATE INDEX IF NOT EXISTS idx_meter_details_fiscal_year
+  ON bm_meter_details(fiscal_year);
 
 -- =============================================================================
 -- 0004_extend_custcode_init.sql - Extended customer fields

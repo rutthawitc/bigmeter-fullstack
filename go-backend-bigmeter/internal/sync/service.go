@@ -398,10 +398,10 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 		}
 
 		upsert := `INSERT INTO bm_meter_details (
-                        year_month, branch_code, org_name, cust_code, use_type, use_name, cust_name, address, route_code,
+                        fiscal_year, year_month, branch_code, org_name, cust_code, use_type, use_name, cust_name, address, route_code,
                         meter_no, meter_size, meter_brand, meter_state, average, present_meter_count, present_water_usg, debt_ym)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-                    ON CONFLICT (year_month, branch_code, cust_code) DO UPDATE SET
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                    ON CONFLICT (fiscal_year, year_month, branch_code, cust_code) DO UPDATE SET
                         org_name=EXCLUDED.org_name,
                         use_type=EXCLUDED.use_type,
                         use_name=EXCLUDED.use_name,
@@ -431,7 +431,7 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 			}
 			seen[cust.String] = true
 			if _, err := tx.Exec(ctx, upsert,
-				ym, branch,
+				fiscal, ym, branch,
 				nil,                     /* org_name */
 				cust.String,             /* cust_code */
 				nil, nil, nil, nil, nil, /* use_type, use_name, cust_name, address, route_code */
@@ -467,7 +467,7 @@ func (s *Service) MonthlyDetails(ctx context.Context, ym string, branch string, 
 			}
 			snapv := snap[c]
 			if _, err := tx.Exec(ctx, upsert,
-				ym, branch, "", c, snapv[0], "", "", "", "", snapv[1], "", "", snapv[2],
+				fiscal, ym, branch, "", c, snapv[0], "", "", "", "", snapv[1], "", "", snapv[2],
 				0.0, 0.0, 0.0, thaiYM,
 			); err != nil {
 				tx.Rollback(ctx)
