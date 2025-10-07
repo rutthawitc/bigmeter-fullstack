@@ -189,7 +189,65 @@ func (s *Service) InitCustcodes(ctx context.Context, fiscalYear int, branch stri
 		}
 	}
 
+	// Auto-backfill last 3 months of usage details for the new cohort
+	log.Printf("init: branch=%s auto-backfilling last 3 months of usage details", branch)
+	if err := s.backfillRecentMonths(ctx, branch, fiscalYear, debtYM, 3, triggeredBy); err != nil {
+		log.Printf("warning: backfill failed for branch=%s: %v", branch, err)
+		// Don't fail the whole init if backfill fails
+	}
+
 	return count, 0, nil
+}
+
+// backfillRecentMonths syncs the last N months of usage details after yearly init.
+// This provides historical context for the newly captured cohort.
+func (s *Service) backfillRecentMonths(ctx context.Context, branch string, fiscalYear int, debtYM string, numMonths int, triggeredBy string) error {
+	// Parse debt_ym to get the reference month (e.g., "202410" -> October 2024)
+	if len(debtYM) != 6 {
+		return fmt.Errorf("invalid debt_ym format: %s", debtYM)
+	}
+
+	year, err := strconv.Atoi(debtYM[:4])
+	if err != nil {
+		return fmt.Errorf("parse year from debt_ym: %w", err)
+	}
+	month, err := strconv.Atoi(debtYM[4:6])
+	if err != nil {
+		return fmt.Errorf("parse month from debt_ym: %w", err)
+	}
+
+	// Generate list of months to backfill (going backwards from debt_ym)
+	months := make([]string, 0, numMonths)
+	for i := 0; i < numMonths; i++ {
+		// Go back i months
+		m := month - i
+		y := year
+		for m <= 0 {
+			m += 12
+			y--
+		}
+		// Convert back to Thai Buddhist year for the sync
+		thaiYear := y + 543
+		ym := fmt.Sprintf("%d%02d", thaiYear, m)
+		months = append(months, ym)
+	}
+
+	log.Printf("backfill: branch=%s months=%v", branch, months)
+
+	// Sync each month using MonthlyDetails
+	batchSize := 100 // Default batch size
+	for _, ym := range months {
+		log.Printf("backfill: branch=%s ym=%s starting", branch, ym)
+		upserted, zeroed, err := s.MonthlyDetails(ctx, ym, branch, batchSize, triggeredBy)
+		if err != nil {
+			log.Printf("backfill: branch=%s ym=%s failed: %v", branch, ym, err)
+			// Continue with other months even if one fails
+			continue
+		}
+		log.Printf("backfill: branch=%s ym=%s completed (upserted=%d, zeroed=%d)", branch, ym, upserted, zeroed)
+	}
+
+	return nil
 }
 
 // MonthlyDetails loads monthly details for a given YYYYMM and branch, filtered to the
