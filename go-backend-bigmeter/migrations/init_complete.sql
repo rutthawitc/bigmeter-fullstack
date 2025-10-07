@@ -1,6 +1,9 @@
 -- Complete database initialization script for Big Meter
--- This combines all migrations in order: 0001 through 0005
+-- This combines all migrations in order: 0001 through 0006
 -- Run this on a fresh database to set up all tables and indexes
+--
+-- Note: fiscal_year column in bm_meter_details (from migration 0006)
+-- is included in the base schema for fresh installations
 
 -- =============================================================================
 -- 0001_init.sql - Main tables
