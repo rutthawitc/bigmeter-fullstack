@@ -140,8 +140,11 @@ nano docker-compose.prod.yml
 ```bash
 mkdir -p migrations seed-data
 
-# Copy migration files
+# Option 1: Copy all migration files (for migration-based approach)
 scp go-backend-bigmeter/migrations/*.sql user@production-server:/opt/bigmeter/migrations/
+
+# Option 2: Copy only init_complete.sql (for fresh install)
+scp go-backend-bigmeter/migrations/init_complete.sql user@production-server:/opt/bigmeter/migrations/
 
 # Copy branch seed data
 scp go-backend-bigmeter/docs/r6_branches.csv user@production-server:/opt/bigmeter/seed-data/
@@ -220,14 +223,36 @@ docker images | grep bigmeter
 
 ### Step 2: Run Database Setup (First Time Only)
 
+**Option A: Using docker-compose migrate service (runs all migrations)**
+
 ```bash
 # Run migrations and seed branches
-docker  compose -f docker-compose.prod.yml --profile setup up migrate seed_branches
+docker compose -f docker-compose.prod.yml --profile setup up migrate seed_branches
 
 # Wait for completion, then check logs
 docker compose -f docker-compose.prod.yml --profile setup logs migrate
 docker compose -f docker-compose.prod.yml --profile setup logs seed_branches
 ```
+
+**Option B: Using init_complete.sql (fresh install, all-in-one)**
+
+```bash
+# Run complete initialization script
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d bigmeter < migrations/init_complete.sql
+
+# Seed branches
+docker compose -f docker-compose.prod.yml --profile setup up seed_branches
+
+# Verify tables exist
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d bigmeter -c "\dt bm_*"
+```
+
+**Note:**
+- Option A: Runs migrations 0001 → 0006 sequentially (recommended for upgrades)
+- Option B: Creates all tables at once with final schema (recommended for fresh installs)
+- Both result in the same database schema including fiscal_year column
 
 ### Step 3: Start Application Services
 
@@ -261,6 +286,28 @@ docker compose -f docker-compose.prod.yml logs sync
 ---
 
 ## Maintenance
+
+### Updating Existing Database Schema
+
+**If you already have a running database and need to add fiscal_year column:**
+
+```bash
+cd /opt/bigmeter
+
+# Download migration 0006
+curl -o migrations/0006_add_fiscal_year_to_details.sql \
+  https://raw.githubusercontent.com/rutthawitc/bigmeter-fullstack/main/go-backend-bigmeter/migrations/0006_add_fiscal_year_to_details.sql
+
+# Run the migration
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d bigmeter < migrations/0006_add_fiscal_year_to_details.sql
+
+# Verify fiscal_year column was added
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d bigmeter -c "\d bm_meter_details"
+```
+
+**Important:** After running this migration, you must rebuild and redeploy the API service with the updated code.
 
 ### Viewing Logs
 
