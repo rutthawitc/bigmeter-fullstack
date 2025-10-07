@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -486,54 +487,48 @@ func (s *Server) pSyncInit(c *gin.Context) {
 	}
 
 	started := time.Now()
-	ctx := c.Request.Context()
 
-	// Execute sync for each branch sequentially (one at a time)
-	// This avoids Oracle connection pool exhaustion from concurrent queries
-	var failedBranches []string
-	var lastError error
-	totalUpserted := 0
-	totalZeroed := 0
+	// Run sync in background to avoid HTTP timeout issues
+	// User can monitor progress via sync logs table
+	go func() {
+		// Use background context instead of request context
+		ctx := context.Background()
 
-	for _, branch := range branches {
-		b := strings.TrimSpace(branch)
-		log.Printf("yearly init: processing branch=%s", b)
-		upserted, zeroed, err := s.syncSvc.InitCustcodes(ctx, fiscal, b, thaiYM, "api")
-		if err != nil {
-			log.Printf("yearly init: branch=%s failed: %v", b, err)
-			failedBranches = append(failedBranches, b)
-			lastError = err
-			// Continue with other branches even if one fails
-		} else {
-			log.Printf("yearly init: branch=%s completed (upserted=%d)", b, upserted)
-			totalUpserted += upserted
-			totalZeroed += zeroed
+		log.Printf("yearly init: starting background sync for %d branches", len(branches))
+		totalUpserted := 0
+		totalZeroed := 0
+		failedCount := 0
+
+		// Execute sync for each branch sequentially (one at a time)
+		// This avoids Oracle connection pool exhaustion from concurrent queries
+		for _, branch := range branches {
+			b := strings.TrimSpace(branch)
+			log.Printf("yearly init: processing branch=%s", b)
+			upserted, zeroed, err := s.syncSvc.InitCustcodes(ctx, fiscal, b, thaiYM, "api")
+			if err != nil {
+				log.Printf("yearly init: branch=%s failed: %v", b, err)
+				failedCount++
+				// Continue with other branches even if one fails
+			} else {
+				log.Printf("yearly init: branch=%s completed (upserted=%d)", b, upserted)
+				totalUpserted += upserted
+				totalZeroed += zeroed
+			}
 		}
-	}
 
-	finished := time.Now()
+		elapsed := time.Since(started)
+		log.Printf("yearly init: background sync completed (total branches=%d, failed=%d, upserted=%d, elapsed=%v)",
+			len(branches), failedCount, totalUpserted, elapsed)
+	}()
 
-	if len(failedBranches) > 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"fiscal_year":     fiscal,
-			"branches":        branches,
-			"debt_ym":         debtYM,
-			"failed_branches": failedBranches,
-			"error":           lastError.Error(),
-			"started_at":      started.Format(time.RFC3339),
-			"finished_at":     finished.Format(time.RFC3339),
-		})
-		return
-	}
-
-	// Success response
-	c.JSON(http.StatusOK, gin.H{
+	// Return immediately with 202 Accepted
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":     "Yearly initialization started in background",
 		"fiscal_year": fiscal,
 		"branches":    branches,
 		"debt_ym":     debtYM,
-		"stats":       gin.H{"upserted": totalUpserted, "zeroed": totalZeroed},
 		"started_at":  started.Format(time.RFC3339),
-		"finished_at": finished.Format(time.RFC3339),
+		"note":        "Monitor progress via sync logs table",
 	})
 }
 
@@ -584,52 +579,47 @@ func (s *Server) pSyncMonthly(c *gin.Context) {
 	}
 
 	started := time.Now()
-	ctx := c.Request.Context()
 
-	// Execute sync for each branch sequentially (one at a time)
-	// This avoids Oracle connection pool exhaustion from concurrent queries
-	var failedBranches []string
-	var lastError error
-	totalUpserted := 0
-	totalZeroed := 0
+	// Run sync in background to avoid HTTP timeout issues
+	// User can monitor progress via sync logs table
+	go func() {
+		// Use background context instead of request context
+		ctx := context.Background()
 
-	for _, branch := range branches {
-		b := strings.TrimSpace(branch)
-		log.Printf("monthly sync: processing branch=%s ym=%s", b, ym)
-		upserted, zeroed, err := s.syncSvc.MonthlyDetails(ctx, ym, b, batchSize, "api")
-		if err != nil {
-			log.Printf("monthly sync: branch=%s ym=%s failed: %v", b, ym, err)
-			failedBranches = append(failedBranches, b)
-			lastError = err
-			// Continue with other branches even if one fails
-		} else {
-			log.Printf("monthly sync: branch=%s ym=%s completed (upserted=%d, zeroed=%d)", b, ym, upserted, zeroed)
-			totalUpserted += upserted
-			totalZeroed += zeroed
+		log.Printf("monthly sync: starting background sync for %d branches (ym=%s)", len(branches), ym)
+		totalUpserted := 0
+		totalZeroed := 0
+		failedCount := 0
+
+		// Execute sync for each branch sequentially (one at a time)
+		// This avoids Oracle connection pool exhaustion from concurrent queries
+		for _, branch := range branches {
+			b := strings.TrimSpace(branch)
+			log.Printf("monthly sync: processing branch=%s ym=%s", b, ym)
+			upserted, zeroed, err := s.syncSvc.MonthlyDetails(ctx, ym, b, batchSize, "api")
+			if err != nil {
+				log.Printf("monthly sync: branch=%s ym=%s failed: %v", b, ym, err)
+				failedCount++
+				// Continue with other branches even if one fails
+			} else {
+				log.Printf("monthly sync: branch=%s ym=%s completed (upserted=%d, zeroed=%d)", b, ym, upserted, zeroed)
+				totalUpserted += upserted
+				totalZeroed += zeroed
+			}
 		}
-	}
 
-	finished := time.Now()
+		elapsed := time.Since(started)
+		log.Printf("monthly sync: background sync completed (total branches=%d, failed=%d, upserted=%d, zeroed=%d, elapsed=%v)",
+			len(branches), failedCount, totalUpserted, totalZeroed, elapsed)
+	}()
 
-	if len(failedBranches) > 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"ym":              ym,
-			"branches":        branches,
-			"failed_branches": failedBranches,
-			"error":           lastError.Error(),
-			"started_at":      started.Format(time.RFC3339),
-			"finished_at":     finished.Format(time.RFC3339),
-		})
-		return
-	}
-
-	// Success response
-	c.JSON(http.StatusOK, gin.H{
-		"ym":          ym,
-		"branches":    branches,
-		"stats":       gin.H{"upserted": totalUpserted, "zeroed": totalZeroed},
-		"started_at":  started.Format(time.RFC3339),
-		"finished_at": finished.Format(time.RFC3339),
+	// Return immediately with 202 Accepted
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":    "Monthly sync started in background",
+		"ym":         ym,
+		"branches":   branches,
+		"started_at": started.Format(time.RFC3339),
+		"note":       "Monitor progress via sync logs table",
 	})
 }
 

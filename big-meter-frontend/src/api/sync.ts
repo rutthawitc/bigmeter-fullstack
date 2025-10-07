@@ -6,14 +6,16 @@ export type YearlyInitRequest = {
 };
 
 export type YearlyInitResponse = {
+  message?: string; // Present in async 202 response
   fiscal_year: number;
   branches: string[];
   debt_ym: string;
-  stats: {
+  stats?: {
+    // Optional - only present in sync completion
     upserted: number;
   };
   started_at: string;
-  finished_at: string;
+  finished_at?: string; // Optional - only present in sync completion
   note?: string;
 };
 
@@ -23,14 +25,16 @@ export type MonthlySyncRequest = {
 };
 
 export type MonthlySyncResponse = {
+  message?: string; // Present in async 202 response
   ym: string;
   branches: string[];
-  stats: {
+  stats?: {
+    // Optional - only present in sync completion
     upserted: number;
     zeroed: number;
   };
   started_at: string;
-  finished_at: string;
+  finished_at?: string; // Optional - only present in sync completion
   note?: string;
 };
 
