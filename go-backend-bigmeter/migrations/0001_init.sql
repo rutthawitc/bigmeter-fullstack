@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS bm_custcode_init (
 
 CREATE TABLE IF NOT EXISTS bm_meter_details (
     id BIGSERIAL PRIMARY KEY,
+    fiscal_year INT NOT NULL,
     year_month TEXT NOT NULL,
     branch_code TEXT NOT NULL,
     org_name TEXT,
@@ -37,7 +38,7 @@ CREATE TABLE IF NOT EXISTS bm_meter_details (
     present_water_usg NUMERIC,
     debt_ym TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (year_month, branch_code, cust_code)
+    UNIQUE (fiscal_year, year_month, branch_code, cust_code)
 );
 
 COMMIT;
