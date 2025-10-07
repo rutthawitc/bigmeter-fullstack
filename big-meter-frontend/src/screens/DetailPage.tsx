@@ -116,13 +116,23 @@ export default function DetailPage() {
   );
   const exportMonthLabels = useMemo(() => monthsAll.map((ym) => fmtThMonth(ym)), [monthsAll]);
 
+  // Calculate fiscal year from the latest month (applied.ym)
+  // All historical months in the view belong to the same fiscal year cohort
+  const fiscalYear = useMemo(() => {
+    if (!applied?.ym) return undefined;
+    const year = parseInt(applied.ym.substring(0, 4), 10);
+    const month = parseInt(applied.ym.substring(4, 6), 10);
+    return month >= 10 ? year + 1 : year;
+  }, [applied?.ym]);
+
   const detailQueries = useQueries({
     queries: monthsAll.map((ym) => ({
-      queryKey: ["details", applied?.branch, ym],
+      queryKey: ["details", applied?.branch, ym, fiscalYear],
       queryFn: () =>
         getDetails({
           branch: applied!.branch,
           ym,
+          fiscal_year: fiscalYear,
           limit: 200,
           order_by: "present_water_usg",
           sort: "DESC",

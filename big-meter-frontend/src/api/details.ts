@@ -25,6 +25,7 @@ export interface DetailsResponse { items: DetailItem[]; total: number; limit: nu
 export function getDetails(params: {
   ym: string
   branch: string
+  fiscal_year?: number
   q?: string
   limit?: number
   offset?: number

@@ -254,9 +254,21 @@ func (s *Server) gDetails(c *gin.Context) {
 		return
 	}
 
-	// Calculate fiscal year from year_month (YYYYMM format)
-	// Fiscal year: Oct-Dec = year+1, Jan-Sep = year
-	fiscal := fiscalYearFromYM(ym)
+	// Get fiscal year from query param if provided, otherwise calculate from ym
+	// This allows frontend to specify fiscal year for historical months that belong to different cohorts
+	var fiscal int
+	if fyParam := strings.TrimSpace(c.Query("fiscal_year")); fyParam != "" {
+		if fy, err := strconv.Atoi(fyParam); err == nil && fy > 2000 && fy < 3000 {
+			fiscal = fy
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fiscal_year parameter"})
+			return
+		}
+	} else {
+		// Default: calculate from year_month (YYYYMM format)
+		// Fiscal year: Oct-Dec = year+1, Jan-Sep = year
+		fiscal = fiscalYearFromYM(ym)
+	}
 
 	limit, offset := parseLimitOffset(c.Query("limit"), c.Query("offset"))
     orderBy := sanitizeOrderBy(c.Query("order_by"), map[string]string{
