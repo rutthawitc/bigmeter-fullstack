@@ -7,7 +7,7 @@ Purpose
 
 High‑Level Flow
 
-- Yearly init (Oct 15, 22:00 Asia/Bangkok)
+- Yearly init (Oct 16, 01:30 Asia/Bangkok)
   - For each branch (`ORG_OWNER_ID = ba_code` from docs/r6_branches.csv), run `sqls/200-meter-minimal.sql` against Oracle with `DEBT_YM=YYYY10` (October) and take the first 200 rows by current usage.
   - Upsert results into Postgres table `bm_custcode_init` with a fiscal year label (Oct–Dec → next label year).
   - This defines the cohort of customers we will follow for the rest of the fiscal year.
@@ -34,7 +34,7 @@ Data Model (PostgreSQL)
 Scheduling & Timezone
 
 - Timezone: `Asia/Bangkok`.
-- Yearly init: cron `0 0 22 15 10 *` (15 Oct 22:00).
+- Yearly init: cron `0 30 1 16 10 *` (16 Oct 01:30).
 - Monthly sync: cron `0 0 8 16 * *` (16th 08:00 for previous month).
 - Fiscal year label: if month ≥ 10 (Oct–Dec), label = `year + 1`; else label = `year`.
 

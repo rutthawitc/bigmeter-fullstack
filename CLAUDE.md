@@ -117,7 +117,7 @@ pnpm format
    - Manual sync triggers
 
 3. **Sync Service (Go + Cron)** - Internal
-   - Yearly init: Oct 15, 22:00 Bangkok time → captures top-200 customers per branch
+   - Yearly init: Oct 16, 01:30 Bangkok time → captures top-200 customers per branch
    - Monthly sync: 16th, 08:00 Bangkok time → updates usage details
    - Oracle → PostgreSQL data synchronization
 

@@ -54,7 +54,7 @@ func Load() (Config, error) {
 		Timezone:          tz,
 		OracleDSN:         os.Getenv("ORACLE_DSN"),
 		PostgresDSN:       os.Getenv("POSTGRES_DSN"),
-		YearlySpec:        getEnv("CRON_YEARLY", "0 0 22 15 10 *"), // 22:00 Oct 15 every year
+		YearlySpec:        getEnv("CRON_YEARLY", "0 30 1 16 10 *"), // 01:30 Oct 16 every year
 		MonthlySpec:       getEnv("CRON_MONTHLY", "0 0 8 16 * *"),  // 08:00 on the 16th monthly
 		EnableYearlyInit:  getBoolEnv("ENABLE_YEARLY_INIT", true),
 		EnableMonthlySync: getBoolEnv("ENABLE_MONTHLY_SYNC", true),

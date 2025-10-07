@@ -50,7 +50,7 @@ Logging (monthly)
 Useful envs (from `.env`)
 
 - `TIMEZONE` (default `Asia/Bangkok`)
-- `CRON_YEARLY` (default `0 0 22 15 10 *`)
+- `CRON_YEARLY` (default `0 30 1 16 10 *`)
 - `CRON_MONTHLY` (default `0 0 8 16 * *`)
 - `MODE` (`init-once`, `month-once`, or empty for scheduler)
 - `YM` (Gregorian YYYYMM) for both init‑once and month‑once

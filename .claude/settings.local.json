@@ -4,7 +4,10 @@
       "Bash(cat:*)",
       "Bash(git init:*)",
       "Bash(docker-compose config:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(xargs sed:*)"
     ],
     "deny": [],
     "ask": []

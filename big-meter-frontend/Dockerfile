@@ -19,7 +19,7 @@ COPY . .
 # Set VITE_API_BASE_URL to empty string for relative URLs
 ARG VITE_API_BASE_URL=""
 ARG VITE_LOGIN_API="https://intranet.pwa.co.th/login/webservice_login6.php"
-ARG VITE_ADMIN_USERNAMES="admin"
+ARG VITE_ADMIN_USERNAMES="11008"
 
 RUN pnpm build
 

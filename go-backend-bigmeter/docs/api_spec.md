@@ -231,7 +231,7 @@ API Spec: BigMeter Sync (REST v1)
   - ตัวอย่างตอบกลับ:
     {
       "timezone": "Asia/Bangkok",
-      "cron_yearly": "0 0 22 15 10 *",
+      "cron_yearly": "0 30 1 16 10 *",
       "cron_monthly": "0 0 8 16 * *",
       "branches_count": 34
     }

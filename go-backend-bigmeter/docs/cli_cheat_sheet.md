@@ -42,7 +42,7 @@ Scheduler Mode
 - Starts automatically when `ORACLE_DSN` is set and `MODE` is empty:
   - `docker compose up -d sync`
 - Cron specs (with seconds field):
-  - `CRON_YEARLY="0 0 22 15 10 *"` (Oct 15, 22:00)
+  - `CRON_YEARLY="0 30 1 16 10 *"` (Oct 16, 01:30)
   - `CRON_MONTHLY="0 0 8 16 * *"` (16th, 08:00)
 - Time zone: `TIMEZONE=Asia/Bangkok`
 

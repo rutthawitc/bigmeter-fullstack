@@ -229,6 +229,6 @@ Status: Admin only; stubbed for frontend integration. No authentication is enfor
 
 - GET `/config`
   - 200 OK:
-    { "timezone": "Asia/Bangkok", "cron_yearly": "0 0 22 15 10 *", "cron_monthly": "0 0 8 16 * *", "branches_count": 34 }
+    { "timezone": "Asia/Bangkok", "cron_yearly": "0 30 1 16 10 *", "cron_monthly": "0 0 8 16 * *", "branches_count": 34 }
   - Curl:
     curl -s http://localhost:8089/api/v1/config
