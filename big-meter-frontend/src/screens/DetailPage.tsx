@@ -12,6 +12,7 @@ import { useToast } from "../lib/useToast";
 import { FilterSection } from "../components/DetailPage/FilterSection";
 import { ResultsHeader } from "../components/DetailPage/ResultsHeader";
 import { DataTable } from "../components/DetailPage/DataTable";
+import { CurrentMonthBanner } from "../components/DetailPage/CurrentMonthBanner";
 import {
   EmptyState,
   WarningState,
@@ -65,6 +66,13 @@ export default function DetailPage() {
   const effectiveMonths = isMobile ? 3 : historyMonths;
   const isAuthenticated = hydrated && Boolean(user);
   const [isExporting, setIsExporting] = useState(false);
+  const [showBanner, setShowBanner] = useState(true);
+
+  // Check if banner should be displayed (before 16th of current month)
+  const shouldShowBanner = useMemo(() => {
+    const today = new Date();
+    return today.getDate() < 16;
+  }, []);
 
   useEffect(() => {
     persistNumber(STORAGE_KEYS.threshold, threshold);
@@ -305,6 +313,10 @@ export default function DetailPage() {
           onApply={handleApply}
           onReset={handleReset}
         />
+
+        {shouldShowBanner && showBanner && (
+          <CurrentMonthBanner onDismiss={() => setShowBanner(false)} />
+        )}
 
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <ResultsHeader
