@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go-backend-bigmeter/internal/config"
 	dbpkg "go-backend-bigmeter/internal/database"
+	"go-backend-bigmeter/internal/notify"
 	syncsvc "go-backend-bigmeter/internal/sync"
 )
 
@@ -70,6 +71,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/sync/monthly", s.pSyncMonthly)
 		v1.GET("/sync/logs", s.gSyncLogs)
 		v1.GET("/config", s.gConfig)
+		// Telegram test endpoint
+		v1.POST("/telegram/test", s.pTelegramTest)
 	}
 	return r
 }
@@ -698,6 +701,51 @@ func (s *Server) gConfig(c *gin.Context) {
         "cron_monthly":  s.cfg.MonthlySpec,
         "branches_count": len(s.cfg.Branches),
     })
+}
+
+// pTelegramTest sends a test notification to verify Telegram integration
+func (s *Server) pTelegramTest(c *gin.Context) {
+	// Check if Telegram is enabled
+	if !s.cfg.Telegram.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Telegram notifications are not enabled",
+			"enabled": false,
+		})
+		return
+	}
+
+	// Create TelegramNotifier instance
+	notifier, err := notify.NewTelegramNotifier(notify.TelegramConfig{
+		Enabled:           s.cfg.Telegram.Enabled,
+		BotToken:          s.cfg.Telegram.BotToken,
+		ChatID:            s.cfg.Telegram.ChatID,
+		YearlyPrefix:      s.cfg.Telegram.YearlyPrefix,
+		MonthlyPrefix:     s.cfg.Telegram.MonthlyPrefix,
+		YearlySuccessMsg:  s.cfg.Telegram.YearlySuccessMsg,
+		YearlyFailureMsg:  s.cfg.Telegram.YearlyFailureMsg,
+		MonthlySuccessMsg: s.cfg.Telegram.MonthlySuccessMsg,
+		MonthlyFailureMsg: s.cfg.Telegram.MonthlyFailureMsg,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to initialize Telegram bot: %v", err),
+		})
+		return
+	}
+
+	// Send test message
+	if err := notifier.SendTestMessage(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to send test message: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Test notification sent successfully",
+		"enabled": true,
+		"chat_id": s.cfg.Telegram.ChatID,
+	})
 }
 
 // helpers

@@ -84,6 +84,16 @@ services:
       # Optional: override via .env or configs/.env inside container if you bind-mount
       BRANCHES: ${BRANCHES:-}
       PORT: ${PORT:-8089}
+      # Telegram notification settings
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-0}
+      TELEGRAM_YEARLY_PREFIX: ${TELEGRAM_YEARLY_PREFIX:-}
+      TELEGRAM_MONTHLY_PREFIX: ${TELEGRAM_MONTHLY_PREFIX:-}
+      TELEGRAM_YEARLY_SUCCESS: ${TELEGRAM_YEARLY_SUCCESS:-}
+      TELEGRAM_YEARLY_FAILURE: ${TELEGRAM_YEARLY_FAILURE:-}
+      TELEGRAM_MONTHLY_SUCCESS: ${TELEGRAM_MONTHLY_SUCCESS:-}
+      TELEGRAM_MONTHLY_FAILURE: ${TELEGRAM_MONTHLY_FAILURE:-}
     ports:
       - "8089:8089"
     restart: unless-stopped

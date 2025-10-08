@@ -168,6 +168,32 @@ func (tn *TelegramNotifier) sendMessage(text string) {
 	}
 }
 
+// SendTestMessage sends a test notification to verify Telegram integration
+func (tn *TelegramNotifier) SendTestMessage() error {
+	if !tn.config.Enabled {
+		return fmt.Errorf("telegram notifications are disabled")
+	}
+
+	if tn.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	message := fmt.Sprintf("🧪 <b>Big Meter - Test Notification</b>\n\n"+
+		"✅ Telegram integration is working correctly!\n"+
+		"Time: %s", time.Now().Format("2006-01-02 15:04:05"))
+
+	msg := tgbotapi.NewMessage(tn.config.ChatID, message)
+	msg.ParseMode = "HTML"
+
+	_, err := tn.bot.Send(msg)
+	if err != nil {
+		return fmt.Errorf("failed to send test message: %w", err)
+	}
+
+	log.Printf("telegram: test notification sent successfully")
+	return nil
+}
+
 // formatDuration formats a duration in a human-readable way
 func formatDuration(d time.Duration) string {
 	if d < time.Second {
