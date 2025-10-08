@@ -38,7 +38,7 @@ export function ResultsHeader({
       <div>
         <h3 className="text-lg font-semibold text-slate-800">
           ผลลัพธ์: <span className="text-blue-600">{filteredCount}</span>{" "}
-          รายชื่อที่เข้าเงื่อนไข
+          รายที่เข้าเงื่อนไข
         </h3>
         <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
           <span>คำอธิบายสี:</span>

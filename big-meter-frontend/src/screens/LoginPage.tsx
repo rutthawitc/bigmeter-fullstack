@@ -78,9 +78,8 @@ export default function LoginPage() {
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-5xl flex-col items-center justify-center">
         <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl shadow-blue-900/5">
           <header className="text-center">
-            <p className="text-sm font-medium text-blue-600">ระบบแสดงผลผู้ใช้น้ำรายใหญ่</p>
             <h1 className="mt-2 text-3xl font-bold text-slate-800">
-              ลงชื่อเข้าใช้ PWA Intranet
+              ระบบแสดงผลผู้ใช้น้ำรายใหญ่
             </h1>
             <p className="mt-2 text-sm text-slate-500">
               ใช้บัญชีผู้ใช้งานเดียวกับระบบ Intranet ของ กปภ.
@@ -89,7 +88,10 @@ export default function LoginPage() {
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-600">
+              <label
+                htmlFor="username"
+                className="block text-sm font-medium text-slate-600"
+              >
                 ชื่อผู้ใช้
               </label>
               <input
@@ -105,7 +107,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-600">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-600"
+              >
                 รหัสผ่าน
               </label>
               <input
