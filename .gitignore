@@ -36,6 +36,7 @@ vendor/
 
 # Claude Code settings (local)
 .claude/settings.local.json
+.claude/
 
 # Environment files
 .env
