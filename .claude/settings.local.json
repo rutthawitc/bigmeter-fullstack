@@ -8,7 +8,9 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(xargs sed:*)",
-      "Read(//Users/rutthawit/my-coding/Golang/**)"
+      "Read(//Users/rutthawit/my-coding/Golang/**)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": []
