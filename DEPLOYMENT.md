@@ -182,10 +182,24 @@ BATCH_SIZE=100
 ENABLE_YEARLY_INIT=true
 ENABLE_MONTHLY_SYNC=true
 
-# Telegram Notifications (Optional)
+# Telegram Sync Notifications (Optional)
 TELEGRAM_ENABLED=true
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 TELEGRAM_CHAT_ID=-1001234567890
+
+# Telegram Alert Notifications (Optional)
+TELEGRAM_ALERT_ENABLED=true
+TELEGRAM_ALERT_CHAT_ID=-1001234567890
+TELEGRAM_ALERT_THRESHOLD=20.0
+TELEGRAM_ALERT_LINK=https://bigmeter.pwa.co.th
+
+# Cron Schedules (Optional)
+CRON_YEARLY=0 30 1 16 10 *     # 01:30 Oct 16 every year
+CRON_MONTHLY=0 0 8 16 * *      # 08:00 on the 16th monthly
+CRON_ALERT=0 10 9 16,30 * *    # 09:10 on day 16 and 30 monthly
+
+# Feature Flags (Optional)
+ENABLE_ALERT=true
 EOF
 
 # Secure the .env file
@@ -590,6 +604,12 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 | `TELEGRAM_YEARLY_FAILURE`  | No         | Default        | Failure message template for yearly              |
 | `TELEGRAM_MONTHLY_SUCCESS` | No         | Default        | Success message template for monthly             |
 | `TELEGRAM_MONTHLY_FAILURE` | No         | Default        | Failure message template for monthly             |
+| `TELEGRAM_ALERT_ENABLED`   | No         | `false`        | Enable Telegram alert notifications              |
+| `TELEGRAM_ALERT_CHAT_ID`   | No         | `0`            | Telegram chat ID for alerts (can be different)   |
+| `TELEGRAM_ALERT_THRESHOLD` | No         | `20.0`         | Alert threshold percentage (e.g., 20 = 20%)      |
+| `TELEGRAM_ALERT_LINK`      | No         | -              | Link to include in alert messages                |
+| `CRON_ALERT`               | No         | See default    | Cron schedule for alerts (16th & 30th, 09:10)    |
+| `ENABLE_ALERT`             | No         | `true`         | Enable alert cron job                            |
 
 ---
 
@@ -652,11 +672,19 @@ TELEGRAM_MONTHLY_FAILURE="❌ การซิงค์รายเดือน�
 ### Step 5: Test Notifications
 
 ```bash
-# Run a one-off sync to test notifications
+# Test sync notifications
 docker-compose -f docker-compose.prod.yml run --rm \
   -e MODE=month-once \
   -e YM=202501 \
   sync
+
+# Test Telegram connection (send test message)
+curl -X POST http://localhost:8089/api/v1/telegram/test
+
+# Test alert notifications
+curl -X POST http://localhost:8089/api/v1/alerts/test \
+  -H "Content-Type: application/json" \
+  -d '{"ym":"202501","threshold":20.0}'
 ```
 
 ### Notification Examples
@@ -683,6 +711,27 @@ Fiscal Year: 2025
 Failed Branches: BA02, BA03
 Error: connection timeout
 Time: 2025-10-15 22:05:30
+```
+
+**Alert Notification:**
+
+```
+🚨 Big Meter - การแจ้งเตือนการใช้น้ำลดลง
+
+📅 เดือน: มกราคม 2568
+📊 ข้อมูลการแจ้งเตือน:
+   • จำนวนสาขา: 22 สาขา
+   • ลูกค้าที่ใช้น้ำลดลงมากกว่า 20.0%: 673 ราย
+
+🔍 รายละเอียด:
+   • BA01: 35 ราย
+   • BA02: 42 ราย
+   • BA03: 28 ราย
+   ...
+
+🔗 ดูรายละเอียดเพิ่มเติม: https://bigmeter.pwa.co.th
+
+⏰ เวลา: 2025-01-16 09:10:05
 ```
 
 ### Troubleshooting Telegram

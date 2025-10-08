@@ -221,6 +221,23 @@ Multi-level error interpretation:
 - Warning state - Non-critical custcode failures
 - Error state - Critical detail fetch failures
 
+### 11. **Current Month Banner**
+
+Informational banner displayed conditionally:
+
+**Features:**
+- Displays only when `today.getDate() < 16`
+- Shows message: "ข้อมูลเดือนปัจจุบัน จะนำเข้าและแสดงผลได้ในวันที่ 16 [Thai month] [Thai year]"
+- Dismissible with close button (session-only, no persistence)
+- Yellow warning style with clock emoji (⏰)
+- Positioned between FilterSection and data table
+
+**Implementation:**
+- Component: `src/components/DetailPage/CurrentMonthBanner.tsx`
+- State management: Local useState in DetailPage
+- Date logic: `useMemo(() => new Date().getDate() < 16, [])`
+- Thai calendar conversion: Gregorian year + 543
+
 ## Environment Variables
 
 ```bash
@@ -352,10 +369,15 @@ pnpm format    # Format code with Prettier
 
 ## Recent Changes (from git history)
 
-1. **Lazy export** - XLSX module now dynamically imported (~700KB bundle reduction)
-2. **CSS fix** - Replaced unsupported `@theme` rule with `@layer base`
-3. **XLSX export** - Added Excel export functionality for detail reports
-4. **Responsive sparklines** - Added hover tooltips with historical trends
+1. **Current Month Banner** - Closeable yellow warning banner that displays before 16th of each month
+   - Shows when current month data will be available (16th)
+   - Thai Buddhist calendar formatting (e.g., "ตุลาคม 2568")
+   - Session-only dismissal (no localStorage persistence)
+   - Component: `src/components/DetailPage/CurrentMonthBanner.tsx`
+2. **Lazy export** - XLSX module now dynamically imported (~700KB bundle reduction)
+3. **CSS fix** - Replaced unsupported `@theme` rule with `@layer base`
+4. **XLSX export** - Added Excel export functionality for detail reports
+5. **Responsive sparklines** - Added hover tooltips with historical trends
 
 ## Known Issues & Considerations
 

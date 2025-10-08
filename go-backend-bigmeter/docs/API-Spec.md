@@ -232,3 +232,75 @@ Status: Admin only; stubbed for frontend integration. No authentication is enfor
     { "timezone": "Asia/Bangkok", "cron_yearly": "0 30 1 16 10 *", "cron_monthly": "0 0 8 16 * *", "branches_count": 34 }
   - Curl:
     curl -s http://localhost:8089/api/v1/config
+
+- GET `/sync/logs`
+  - Query params (all optional):
+    - `branch`: Filter by branch code
+    - `sync_type`: Filter by type (`yearly_init` or `monthly_sync`)
+    - `status`: Filter by status (`success`, `error`, `in_progress`)
+    - `limit` (default 50), `offset` (default 0)
+  - 200 OK:
+    {
+      "items": [
+        {
+          "id": 1,
+          "sync_type": "monthly_sync",
+          "branch_code": "BA01",
+          "year_month": "202501",
+          "fiscal_year": null,
+          "debt_ym": null,
+          "status": "success",
+          "started_at": "2025-01-16T08:00:01Z",
+          "finished_at": "2025-01-16T08:00:35Z",
+          "duration_ms": 34123,
+          "records_upserted": 199,
+          "records_zeroed": 5,
+          "error_message": null,
+          "triggered_by": "scheduler",
+          "created_at": "2025-01-16T08:00:35Z"
+        }
+      ],
+      "total": 1,
+      "limit": 50,
+      "offset": 0
+    }
+  - Curl:
+    curl -s "http://localhost:8089/api/v1/sync/logs?branch=BA01&sync_type=monthly_sync&status=success&limit=20"
+
+## Telegram & Alerts
+
+- POST `/telegram/test`
+  - Purpose: Send a test Telegram notification to verify bot integration
+  - No request body required
+  - 200 OK:
+    { "message": "Test notification sent successfully" }
+  - 500 Internal Server Error:
+    { "error": "telegram bot not initialized" }
+  - Curl:
+    curl -X POST http://localhost:8089/api/v1/telegram/test
+
+- POST `/alerts/test`
+  - Purpose: Trigger alert calculation and notification for usage decrease detection
+  - Body (JSON, all fields optional):
+    {
+      "ym": "202501",      // defaults to current month if omitted
+      "threshold": 20.0    // defaults to TELEGRAM_ALERT_THRESHOLD env var if omitted
+    }
+  - 200 OK:
+    {
+      "stats": {
+        "total_branches": 22,
+        "branches_with_alerts": 22,
+        "total_customers": 673
+      },
+      "message": "Alert notification sent successfully"
+    }
+  - Notes:
+    - Compares specified month with previous month
+    - Only includes customers where usage decrease >= threshold percentage
+    - Skips customers where previous month usage = 0
+    - Sends formatted Thai message to TELEGRAM_ALERT_CHAT_ID
+  - Curl:
+    curl -X POST -H "Content-Type: application/json" \
+      -d '{"ym":"202501","threshold":20.0}' \
+      http://localhost:8089/api/v1/alerts/test

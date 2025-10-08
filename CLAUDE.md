@@ -119,7 +119,9 @@ pnpm format
 3. **Sync Service (Go + Cron)** - Internal
    - Yearly init: Oct 16, 01:30 Bangkok time → captures top-200 customers per branch
    - Monthly sync: 16th, 08:00 Bangkok time → updates usage details
+   - Alert notifications: 16th & 30th, 09:10 Bangkok time → usage decrease alerts
    - Oracle → PostgreSQL data synchronization
+   - Telegram notifications for sync and alerts
 
 4. **PostgreSQL Database** - Port 5432
    - `bm_branches` - Branch metadata
@@ -159,6 +161,27 @@ TIMEZONE=Asia/Bangkok
 PORT=8089
 ORACLE_DSN=user/pass@host:1521/service_name
 BRANCHES=BA01,BA02,BA03  # Comma-separated branch codes
+
+# Telegram sync notifications (optional)
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+
+# Telegram alert notifications (optional)
+TELEGRAM_ALERT_ENABLED=false
+TELEGRAM_ALERT_CHAT_ID=your_alert_chat_id
+TELEGRAM_ALERT_THRESHOLD=20.0
+TELEGRAM_ALERT_LINK=https://bigmeter.pwa.co.th
+
+# Cron schedules
+CRON_YEARLY=0 30 1 16 10 *     # 01:30 Oct 16 every year
+CRON_MONTHLY=0 0 8 16 * *      # 08:00 on the 16th monthly
+CRON_ALERT=0 10 9 16,30 * *    # 09:10 on day 16 and 30 monthly
+
+# Feature flags
+ENABLE_YEARLY_INIT=true
+ENABLE_MONTHLY_SYNC=true
+ENABLE_ALERT=true
 ```
 
 ### Sync Service Modes
@@ -182,6 +205,38 @@ The sync service (`cmd/sync/main.go`) supports multiple modes via `MODE` env var
 - Uses **TanStack Query (React Query)** for caching and parallel requests
 - `useQueries` fetches multiple months of data simultaneously (up to 12 months)
 - Lazy-loads Excel export library to reduce bundle size (~700KB savings)
+
+### Alert Notification System
+
+**Purpose**: Automatically notify users about significant water usage decreases
+
+**Features**:
+- Compares current month vs previous month usage for all branches
+- Default threshold: 20% decrease (configurable via `TELEGRAM_ALERT_THRESHOLD`)
+- Scheduled runs: 16th and 30th of each month at 09:10 AM
+- Sends summary to dedicated Telegram chat (`TELEGRAM_ALERT_CHAT_ID`)
+- Manual testing via `POST /alerts/test` endpoint
+
+**Implementation**:
+- Backend: `internal/alert/service.go` (calculation logic), `internal/alert/message.go` (Thai formatting)
+- Database: Queries `bm_meter_details` for usage comparison
+- Logic: Skip if previous = 0, include if `((current - previous) / previous) × 100 ≤ -threshold`
+- Output: Single message with branch count and total customer count
+
+### Current Month Banner
+
+**Purpose**: Inform users when current month data will be available
+
+**Features**:
+- Displays before 16th of each month: "ข้อมูลเดือนปัจจุบัน จะนำเข้าและแสดงผลได้ในวันที่ 16 [Thai month] [Thai year]"
+- Closeable yellow warning banner (session-only dismissal)
+- Shows Thai Buddhist calendar date (e.g., "ตุลาคม 2568")
+- Positioned between filter section and data table
+
+**Implementation**:
+- Frontend: `src/components/DetailPage/CurrentMonthBanner.tsx`
+- State management: Component state in `DetailPage.tsx` (no localStorage)
+- Date logic: `new Date().getDate() < 16`
 
 ### Sync Operation Logging
 
@@ -220,6 +275,10 @@ Base URL: `http://localhost:8089/api/v1`
   - Returns: `{"ym": "202501", "branches": [...], "stats": {"upserted": 199, "zeroed": 5}, "started_at": "...", "finished_at": "..."}`
 - `GET /sync/logs?branch=&sync_type=&status=&limit=&offset=` - Retrieve sync operation logs
   - Returns: `{"items": [...], "total": 1, "limit": 50, "offset": 0}`
+- `POST /telegram/test` - Send test Telegram notification
+  - Returns: `{"message": "Test notification sent successfully"}`
+- `POST /alerts/test` - Trigger alert calculation (body: `{"ym": "202501", "threshold": 20.0}`)
+  - Returns: `{"stats": {"total_branches": 22, "branches_with_alerts": 22, "total_customers": 673}, "message": "Alert notification sent successfully"}`
 
 ## Database Schema
 
