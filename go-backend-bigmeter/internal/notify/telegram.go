@@ -194,6 +194,28 @@ func (tn *TelegramNotifier) SendTestMessage() error {
 	return nil
 }
 
+// SendAlertMessage sends an alert notification message
+func (tn *TelegramNotifier) SendAlertMessage(message string) error {
+	if !tn.config.Enabled {
+		return fmt.Errorf("telegram notifications are disabled")
+	}
+
+	if tn.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	msg := tgbotapi.NewMessage(tn.config.ChatID, message)
+	msg.ParseMode = "HTML"
+
+	_, err := tn.bot.Send(msg)
+	if err != nil {
+		return fmt.Errorf("failed to send alert message: %w", err)
+	}
+
+	log.Printf("telegram: alert notification sent successfully")
+	return nil
+}
+
 // formatDuration formats a duration in a human-readable way
 func formatDuration(d time.Duration) string {
 	if d < time.Second {

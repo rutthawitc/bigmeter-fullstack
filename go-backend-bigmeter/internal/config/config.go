@@ -20,10 +20,14 @@ type Config struct {
 	// Schedules use cron spec; timezone applied from Timezone.
 	YearlySpec        string
 	MonthlySpec       string
+	AlertSpec         string
 	EnableYearlyInit  bool
 	EnableMonthlySync bool
+	EnableAlert       bool
 	// Telegram notification settings
 	Telegram TelegramConfig
+	// Alert notification settings
+	Alert AlertConfig
 }
 
 // TelegramConfig holds Telegram notification settings
@@ -37,6 +41,14 @@ type TelegramConfig struct {
 	YearlyFailureMsg  string
 	MonthlySuccessMsg string
 	MonthlyFailureMsg string
+}
+
+// AlertConfig holds alert notification settings
+type AlertConfig struct {
+	Enabled   bool
+	ChatID    int64
+	Threshold float64
+	Link      string
 }
 
 // Load loads configuration from environment variables. It will read a local
@@ -56,9 +68,12 @@ func Load() (Config, error) {
 		PostgresDSN:       os.Getenv("POSTGRES_DSN"),
 		YearlySpec:        getEnv("CRON_YEARLY", "0 30 1 16 10 *"), // 01:30 Oct 16 every year
 		MonthlySpec:       getEnv("CRON_MONTHLY", "0 0 8 16 * *"),  // 08:00 on the 16th monthly
+		AlertSpec:         getEnv("CRON_ALERT", "0 10 9 16,30 * *"), // 09:10 on day 16 and 30 monthly
 		EnableYearlyInit:  getBoolEnv("ENABLE_YEARLY_INIT", true),
 		EnableMonthlySync: getBoolEnv("ENABLE_MONTHLY_SYNC", true),
+		EnableAlert:       getBoolEnv("ENABLE_ALERT", true),
 		Telegram:          loadTelegramConfig(),
+		Alert:             loadAlertConfig(),
 	}
 
 	// Branch list as comma-separated codes, e.g. BA01,BA02,...
@@ -98,6 +113,18 @@ func getInt64Env(key string, def int64) int64 {
 	return n
 }
 
+func getFloat64Env(key string, def float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
 func loadTelegramConfig() TelegramConfig {
 	return TelegramConfig{
 		Enabled:  getBoolEnv("TELEGRAM_ENABLED", false),
@@ -131,6 +158,15 @@ func loadTelegramConfig() TelegramConfig {
 				"Failed Branches: {failed_branches}\n"+
 				"Error: {error}\n"+
 				"Time: {timestamp}"),
+	}
+}
+
+func loadAlertConfig() AlertConfig {
+	return AlertConfig{
+		Enabled:   getBoolEnv("TELEGRAM_ALERT_ENABLED", false),
+		ChatID:    getInt64Env("TELEGRAM_ALERT_CHAT_ID", 0),
+		Threshold: getFloat64Env("TELEGRAM_ALERT_THRESHOLD", 20.0),
+		Link:      getEnv("TELEGRAM_ALERT_LINK", ""),
 	}
 }
 

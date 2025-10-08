@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/robfig/cron/v3"
+	"go-backend-bigmeter/internal/alert"
 	"go-backend-bigmeter/internal/config"
 	dbpkg "go-backend-bigmeter/internal/database"
 	"go-backend-bigmeter/internal/notify"
@@ -241,6 +242,31 @@ func main() {
 			log.Printf("monthly sync disabled (ENABLE_MONTHLY_SYNC=false)")
 		}
 
+		// Alert notification (optional)
+		if cfg.EnableAlert {
+			alertService := alert.NewService(
+				pg,
+				cfg.Telegram.BotToken,
+				cfg.Alert.ChatID,
+				cfg.Alert.Threshold,
+				cfg.Alert.Link,
+			)
+			_, err = cr.AddFunc(cfg.AlertSpec, func() {
+				now := time.Now().In(loc)
+				log.Printf("cron alert: starting threshold=%.1f%%", cfg.Alert.Threshold)
+				if err := alertService.RunDaily(context.Background(), now); err != nil {
+					log.Printf("cron alert: error %v", err)
+				} else {
+					log.Printf("cron alert: completed successfully")
+				}
+			})
+			if err != nil {
+				log.Fatalf("cron alert add: %v", err)
+			}
+		} else {
+			log.Printf("alert notifications disabled (ENABLE_ALERT=false)")
+		}
+
 		// Log scheduler status
 		yearlyStatus := "disabled"
 		if cfg.EnableYearlyInit {
@@ -250,7 +276,11 @@ func main() {
 		if cfg.EnableMonthlySync {
 			monthlyStatus = cfg.MonthlySpec
 		}
-		log.Printf("scheduler running (TZ=%s) yearly='%s' monthly='%s'", cfg.Timezone, yearlyStatus, monthlyStatus)
+		alertStatus := "disabled"
+		if cfg.EnableAlert {
+			alertStatus = cfg.AlertSpec
+		}
+		log.Printf("scheduler running (TZ=%s) yearly='%s' monthly='%s' alert='%s'", cfg.Timezone, yearlyStatus, monthlyStatus, alertStatus)
 		cr.Run()
 	}
 }

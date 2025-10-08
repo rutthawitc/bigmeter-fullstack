@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go-backend-bigmeter/internal/alert"
 	"go-backend-bigmeter/internal/config"
 	dbpkg "go-backend-bigmeter/internal/database"
 	"go-backend-bigmeter/internal/notify"
@@ -73,6 +74,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/config", s.gConfig)
 		// Telegram test endpoint
 		v1.POST("/telegram/test", s.pTelegramTest)
+		// Alert test endpoint
+		v1.POST("/alerts/test", s.pAlertTest)
 	}
 	return r
 }
@@ -745,6 +748,76 @@ func (s *Server) pTelegramTest(c *gin.Context) {
 		"message": "Test notification sent successfully",
 		"enabled": true,
 		"chat_id": s.cfg.Telegram.ChatID,
+	})
+}
+
+// pAlertTest triggers an alert calculation and sends notification
+func (s *Server) pAlertTest(c *gin.Context) {
+	var req struct {
+		YM        string  `json:"ym"`
+		Threshold float64 `json:"threshold"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Allow empty body, use defaults
+		req.YM = ""
+		req.Threshold = 0
+	}
+
+	// Default to current month if not specified
+	ym := req.YM
+	if ym == "" {
+		now := time.Now()
+		ym = fmt.Sprintf("%04d%02d", now.Year(), now.Month())
+	}
+
+	// Validate ym format
+	if len(ym) != 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ym format, expect YYYYMM"})
+		return
+	}
+
+	// Default to config threshold if not specified
+	threshold := req.Threshold
+	if threshold <= 0 {
+		threshold = s.cfg.Alert.Threshold
+	}
+
+	// Create alert service
+	alertService := alert.NewService(
+		s.pg,
+		s.cfg.Telegram.BotToken,
+		s.cfg.Alert.ChatID,
+		threshold,
+		s.cfg.Alert.Link,
+	)
+
+	// Calculate alerts
+	stats, err := alertService.CalculateAlerts(c.Request.Context(), ym, threshold)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Send notification if enabled
+	if s.cfg.Alert.Enabled {
+		if err := alertService.SendNotification(stats); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("Failed to send notification: %v", err),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":               "Alert calculated and sent successfully",
+		"ym":                    stats.YM,
+		"prev_ym":               stats.PrevYM,
+		"threshold":             stats.Threshold,
+		"total_branches":        stats.TotalBranches,
+		"branches_with_alerts":  stats.BranchesWithAlerts,
+		"total_customers":       stats.TotalCustomers,
+		"notification_enabled":  s.cfg.Alert.Enabled,
 	})
 }
 
